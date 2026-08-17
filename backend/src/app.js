@@ -1,0 +1,67 @@
+const express = require('express');
+const helmet = require('helmet');
+const mongoose = require('mongoose');
+const AppError = require('./shared/errors/app-error');
+const { httpLogger } = require('./shared/logger');
+const { corsMiddleware } = require('./shared/middleware/cors.middleware');
+const { authLimiter, publicLimiter, apiLimiter } = require('./shared/middleware/rate-limiter.middleware');
+const authRoutes = require('./modules/auth/presentation/routes/auth.routes');
+const urlRoutes = require('./modules/urls/presentation/routes/url.routes');
+const analyticsRoutes = require('./modules/analytics/presentation/routes/analytics.routes');
+const publicUrlRoutes = require('./modules/urls/presentation/routes/public-url.routes');
+
+const app = express();
+
+app.use(helmet());
+app.use(corsMiddleware);
+app.use(httpLogger);
+app.use(express.json({ limit: '1mb' }));
+
+// Health and Readiness endpoints (no rate limiting)
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'OK' });
+});
+
+app.get('/health/live', (req, res) => {
+  res.status(200).json({ status: 'ALIVE' });
+});
+
+app.get('/health/ready', (req, res) => {
+  const isMongoReady = mongoose.connection.readyState === 1;
+  if (isMongoReady) {
+    res.status(200).json({ status: 'READY', database: 'connected' });
+  } else {
+    res.status(503).json({ status: 'UNAVAILABLE', database: 'disconnected' });
+  }
+});
+
+// API Routes
+app.use('/api/v1/auth', authLimiter, authRoutes);
+app.use('/api/v1/urls', apiLimiter, urlRoutes);
+app.use('/api/v1/urls', apiLimiter, analyticsRoutes);
+
+app.use('/api/v1', (req, res, next) => {
+  next(new AppError('Route not found', 404));
+});
+
+// Public Redirect Route
+app.use('/', publicLimiter, publicUrlRoutes);
+
+app.use((req, res) => {
+  res.status(404).json({ message: 'Route not found' });
+});
+
+app.use((err, req, res, next) => {
+  const statusCode = err.statusCode || err.status || 500;
+  const message = statusCode >= 500 ? 'Internal server error' : err.message;
+
+  if (statusCode >= 500) {
+    if (req.log) req.log.error(err);
+  } else {
+    if (req.log) req.log.warn(err);
+  }
+
+  res.status(statusCode).json({ message });
+});
+
+module.exports = app;
