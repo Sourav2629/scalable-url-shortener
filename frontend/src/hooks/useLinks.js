@@ -40,7 +40,6 @@ export function useLinks() {
   }, [searchQuery]);
 
   const fetchLinks = useCallback(async (page = 1, search = '') => {
-    console.log('[useLinks] fetchLinks called with:', { page, search, sortBy, sortOrder, limit: pagination.limit });
     setIsLoading(true);
     setError(null);
     try {
@@ -51,7 +50,6 @@ export function useLinks() {
         sortBy,
         sortOrder,
       });
-      console.log('[useLinks] fetchLinks response:', data);
       setLinks(data.urls || []);
       setPagination((prev) => ({
         ...prev,
@@ -60,7 +58,6 @@ export function useLinks() {
         totalPages: data.totalPages || 0,
       }));
     } catch (err) {
-      console.error('[useLinks] fetchLinks error:', err);
       setError(err.response?.data?.error?.message || err.message || 'Failed to fetch links');
       setLinks([]);
     } finally {

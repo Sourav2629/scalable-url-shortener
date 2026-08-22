@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
@@ -13,12 +13,15 @@ export default function LoginPage() {
   const [serverError, setServerError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  // If already authenticated, redirect to /app
-  if (isAuthenticated) {
-    const from = location.state?.from?.pathname || '/app';
-    navigate(from, { replace: true });
-    return null;
-  }
+  const from = location.state?.from?.pathname || '/app';
+
+  // Redirect authenticated users away from the login screen. Runs as an effect
+  // so we never trigger navigation (a router state update) during render.
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate(from, { replace: true });
+    }
+  }, [isAuthenticated, from, navigate]);
 
   const validate = useCallback(() => {
     const next = {};
@@ -53,7 +56,6 @@ export default function LoginPage() {
 
     try {
       await login({ email: email.trim().toLowerCase(), password });
-      const from = location.state?.from?.pathname || '/app';
       navigate(from, { replace: true });
     } catch (err) {
       const status = err.response?.status;
@@ -72,6 +74,10 @@ export default function LoginPage() {
       setIsLoading(false);
     }
   };
+
+  // All hooks run above this point, so this conditional return keeps hook order
+  // stable while avoiding a flash of the form for already-authenticated users.
+  if (isAuthenticated) return null;
 
   return (
     <div className="w-full">

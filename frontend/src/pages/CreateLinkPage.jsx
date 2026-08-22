@@ -387,7 +387,7 @@ export default function CreateLinkPage() {
 
       const shortUrl = buildShortUrl(result.shortCode);
 
-      navigate('/app', {
+      navigate('/app/links', {
         replace: false,
         state: {
           successNotification: {
@@ -431,7 +431,7 @@ export default function CreateLinkPage() {
         </div>
         <button
           type="button"
-          onClick={() => navigate('/app')}
+          onClick={() => navigate('/app/links')}
           className="h-9 px-4 inline-flex items-center gap-2 rounded-[6px] bg-[#1E242D] border border-[#2A313D] text-[#A8B0BD] text-[13px] font-medium hover:bg-[#2A313D] hover:text-[#F5F7FA] transition-colors"
         >
           <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
@@ -448,7 +448,7 @@ export default function CreateLinkPage() {
 
       <div className="mb-8">
         <Link
-          to="/app"
+          to="/app/links"
           className="inline-flex items-center gap-2 text-[16px] font-medium text-[#707A8A] hover:text-[#A8B0BD] transition-colors group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F2B95F] rounded-[4px]"
         >
           <svg className="w-3.5 h-3.5 transition-transform group-hover:-translate-x-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
@@ -610,7 +610,7 @@ export default function CreateLinkPage() {
           <div className="px-6 md:px-7 py-5 border-t border-[#2A313D] bg-[#1B202B]/20 flex items-center justify-between gap-3">
             <button
               type="button"
-              onClick={() => navigate('/app')}
+              onClick={() => navigate('/app/links')}
               className="h-10 px-5 inline-flex items-center justify-center gap-2 rounded-[6px] bg-transparent border border-[#2A313D] text-[#A8B0BD] font-semibold text-[13px] hover:bg-[#1E242D] hover:text-[#F5F7FA] hover:border-[#3A414D] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F2B95F] focus-visible:ring-offset-2 focus-visible:ring-offset-[#151922]"
             >
               Cancel

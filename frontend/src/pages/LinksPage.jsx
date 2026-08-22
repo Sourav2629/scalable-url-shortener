@@ -138,7 +138,6 @@ export default function LinksPage() {
   ];
 
   const handleSortClick = (key) => {
-    console.log('[LinksPage] handleSortClick called with:', key);
     if (columns.find((c) => c.key === key)?.sortable) {
       handleSort(key);
     }
@@ -268,7 +267,6 @@ export default function LinksPage() {
             placeholder="Search links..."
             value={searchQuery}
             onChange={(e) => {
-              console.log('[LinksPage] search input changed:', e.target.value);
               handleSearch(e.target.value);
             }}
             className="w-full h-10 pl-10 pr-4 bg-[#151922] border border-[#2A313D] rounded-[6px] text-[#F5F7FA] placeholder-[#707A8A] focus:border-[#F2B95F] focus:outline-none focus:ring-1 focus:ring-[#F2B95F] transition-colors"
@@ -440,35 +438,43 @@ export default function LinksPage() {
                         <div className="flex items-center gap-1.5">
                           <Link
                             to={`/app/links/${link.id}/edit`}
-                            className="p-1.5 rounded-[4px] text-[#707A8A] hover:text-[#F2B95F] hover:bg-[#222936] transition-colors"
-                            aria-label={`Edit ${link.shortCode}`}
+                            className="group/tooltip relative p-1.5 rounded-[4px] text-[#707A8A] hover:text-[#F2B95F] hover:bg-[#222936] transition-colors"
+                            title="Edit link"
+                            aria-label={`Edit link ${link.shortCode}`}
                           >
                             <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
                               <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" strokeLinecap="round" strokeLinejoin="round" />
                               <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" strokeLinecap="round" strokeLinejoin="round" />
                             </svg>
+                            <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[4px] bg-[#1B202B] border border-[#2A313D] text-[10px] font-medium text-[#F5F7FA] whitespace-nowrap opacity-0 group-hover/tooltip:opacity-100 transition-opacity z-50">Edit link</span>
                           </Link>
                           <Link
                             to={`/app/links/${link.id}`}
-                            className="p-1.5 rounded-[4px] text-[#707A8A] hover:text-[#50CFA6] hover:bg-[#222936] transition-colors"
-                            aria-label={`View details for ${link.shortCode}`}
+                            className="group/tooltip relative p-1.5 rounded-[4px] text-[#707A8A] hover:text-[#50CFA6] hover:bg-[#222936] transition-colors"
+                            title="View analytics"
+                            aria-label={`View analytics for ${link.shortCode}`}
                           >
                             <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" strokeLinecap="round" strokeLinejoin="round" />
-                              <circle cx="12" cy="12" r="3" strokeLinecap="round" strokeLinejoin="round" />
+                              <path d="M3 20h18" strokeLinecap="round" />
+                              <rect x="5" y="12" width="3" height="8" rx="0.5" />
+                              <rect x="10.5" y="7" width="3" height="13" rx="0.5" />
+                              <rect x="16" y="3" width="3" height="17" rx="0.5" />
                             </svg>
+                            <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[4px] bg-[#1B202B] border border-[#2A313D] text-[10px] font-medium text-[#F5F7FA] whitespace-nowrap opacity-0 group-hover/tooltip:opacity-100 transition-opacity z-50">View analytics</span>
                           </Link>
                           <button
                             type="button"
                             onClick={() => handleDeleteClick(link)}
                             disabled={deleteLoading}
-                            className="p-1.5 rounded-[4px] text-[#707A8A] hover:text-[#F06A7A] hover:bg-[#222936] transition-colors disabled:opacity-50"
-                            aria-label={`Delete ${link.shortCode}`}
+                            className="group/tooltip relative p-1.5 rounded-[4px] text-[#707A8A] hover:text-[#F06A7A] hover:bg-[#222936] transition-colors disabled:opacity-50"
+                            title="Delete link"
+                            aria-label={`Delete link ${link.shortCode}`}
                           >
                             <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
                               <polyline points="3 6 5 6 21 6" strokeLinecap="round" strokeLinejoin="round" />
                               <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" strokeLinecap="round" strokeLinejoin="round" />
                             </svg>
+                            <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[4px] bg-[#1B202B] border border-[#2A313D] text-[10px] font-medium text-[#F5F7FA] whitespace-nowrap opacity-0 group-hover/tooltip:opacity-100 transition-opacity z-50">Delete link</span>
                           </button>
                         </div>
                       </td>
@@ -547,12 +553,15 @@ export default function LinksPage() {
                     <Link
                       to={`/app/links/${link.id}`}
                       className="flex-1 h-9 px-3 inline-flex items-center justify-center gap-2 rounded-[6px] bg-[#1B202B] border border-[#2A313D] text-[12px] font-medium text-[#A8B0BD] hover:bg-[#222936] hover:text-[#50CFA6] transition-colors"
+                      aria-label={`View analytics for ${link.shortCode}`}
                     >
                       <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" strokeLinecap="round" strokeLinejoin="round" />
-                        <circle cx="12" cy="12" r="3" strokeLinecap="round" strokeLinejoin="round" />
+                        <path d="M3 20h18" strokeLinecap="round" />
+                        <rect x="5" y="12" width="3" height="8" rx="0.5" />
+                        <rect x="10.5" y="7" width="3" height="13" rx="0.5" />
+                        <rect x="16" y="3" width="3" height="17" rx="0.5" />
                       </svg>
-                      Details
+                      Analytics
                     </Link>
                     <button
                       type="button"

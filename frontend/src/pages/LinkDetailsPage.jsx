@@ -1,6 +1,5 @@
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { format, subDays, startOfDay, endOfDay, parseISO } from 'date-fns';
 import { useLinkDetails } from '../hooks/useLinkDetails';
 import { deleteUrl } from '../services/url.service';
@@ -19,6 +18,8 @@ function getDateRangeFromOption(option) {
   return { from, to };
 }
 
+const numberFormat = new Intl.NumberFormat('en-US');
+
 function formatNumber(num) {
   if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
   if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
@@ -34,15 +35,6 @@ function StatusBadge({ isActive }) {
   return isActive
     ? <span className="inline-flex items-center px-2 py-0.5 rounded-[4px] text-[10px] font-mono font-medium tracking-[0.1em] uppercase bg-[#50CFA6]/15 text-[#50CFA6]">Active</span>
     : <span className="inline-flex items-center px-2 py-0.5 rounded-[4px] text-[10px] font-mono font-medium tracking-[0.1em] uppercase bg-[#F06B7A]/15 text-[#F06B7A]">Inactive</span>;
-}
-
-function Bar({ value, max }) {
-  const w = max ? Math.max(2, (value / max) * 100) : 0;
-  return (
-    <div className="h-2 rounded-full bg-[#1B202B] overflow-hidden w-full">
-      <div className="h-full rounded-full transition-all duration-500" style={{ width: `${w}%`, backgroundColor: '#F2B95F' }} />
-    </div>
-  );
 }
 
 function LoadingSkeleton() {
@@ -101,12 +93,102 @@ function NotFoundState({ onBack }) {
   );
 }
 
-function ChartTooltip({ active, payload, label }) {
-  if (!active || !payload?.length) return null;
+const CHART_WIDTH = 800;
+const CHART_HEIGHT = 300;
+const CHART_MARGIN = { top: 30, right: 12, bottom: 32, left: 8 };
+
+function SparklineChart({ data, label }) {
+  const svgRef = useRef(null);
+  const [hoverIdx, setHoverIdx] = useState(null);
+  const [tooltipPos, setTooltipPos] = useState(null);
+
+  const { path, areaPath, points, baseline } = useMemo(() => {
+    if (!data.length) return { path: '', areaPath: '', points: [], baseline: 0 };
+    const w = CHART_WIDTH - CHART_MARGIN.left - CHART_MARGIN.right;
+    const h = CHART_HEIGHT - CHART_MARGIN.top - CHART_MARGIN.bottom;
+    const maxVal = Math.max(...data.map(d => d.clicks), 1);
+    const baseY = CHART_MARGIN.top + h;
+
+    const pts = data.map((d, i) => {
+      const x = CHART_MARGIN.left + (i / (data.length - 1 || 1)) * w;
+      const y = CHART_MARGIN.top + h - (d.clicks / maxVal) * h;
+      return { x, y, ...d };
+    });
+
+    // Smooth curve through points
+    let d = `M${pts[0].x},${pts[0].y}`;
+    for (let i = 1; i < pts.length; i++) {
+      const prev = pts[i - 1];
+      const cur = pts[i];
+      const cpx = (prev.x + cur.x) / 2;
+      d += ` C${cpx},${prev.y} ${cpx},${cur.y} ${cur.x},${cur.y}`;
+    }
+    const area = `${d} L${pts[pts.length - 1].x},${baseY} L${pts[0].x},${baseY} Z`;
+
+    return { path: d, areaPath: area, points: pts, baseline: baseY };
+  }, [data]);
+
+  const handleMouseMove = useCallback((e) => {
+    if (!points.length || !svgRef.current) return;
+    const rect = svgRef.current.getBoundingClientRect();
+    const mouseX = ((e.clientX - rect.left) / rect.width) * CHART_WIDTH;
+    let closest = 0;
+    let minDist = Infinity;
+    points.forEach((p, i) => {
+      const dist = Math.abs(p.x - mouseX);
+      if (dist < minDist) { minDist = dist; closest = i; }
+    });
+    setHoverIdx(closest);
+    const svgX = (e.clientX - rect.left) / rect.width * 100;
+    const svgY = (e.clientY - rect.top) / rect.height * 100;
+    setTooltipPos({ x: svgX, y: svgY });
+  }, [points]);
+
   return (
-    <div className="bg-[#1B202B] border border-[#2A313D] rounded-[6px] px-3 py-2 text-xs">
-      <p className="text-[#707A8A] font-mono mb-1">{label}</p>
-      <p className="text-[#F5F7FA] font-semibold">{payload[0].value.toLocaleString()} clicks</p>
+    <div className="relative h-full w-full">
+      <svg
+        ref={svgRef}
+        viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
+        width="100%"
+        height="100%"
+        preserveAspectRatio="none"
+        onMouseMove={handleMouseMove}
+        onMouseLeave={() => { setHoverIdx(null); setTooltipPos(null); }}
+        role="img"
+        aria-label={label || 'Click activity chart'}
+        style={{ display: 'block' }}
+      >
+        <defs>
+          <linearGradient id="sparkGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#F2B95F" stopOpacity="0.25" />
+            <stop offset="100%" stopColor="#F2B95F" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        {/* Grid lines — strictly within data region */}
+        <g stroke="#2A313D" strokeWidth="1" strokeDasharray="3 3">
+          <path d={`M${CHART_MARGIN.left},${CHART_MARGIN.top} H${CHART_WIDTH - CHART_MARGIN.right}`} />
+          <path d={`M${CHART_MARGIN.left},${CHART_MARGIN.top + (CHART_HEIGHT - CHART_MARGIN.top - CHART_MARGIN.bottom) * 0.5} H${CHART_WIDTH - CHART_MARGIN.right}`} />
+          <path d={`M${CHART_MARGIN.left},${baseline} H${CHART_WIDTH - CHART_MARGIN.right}`} />
+        </g>
+        {/* Area fill */}
+        <path d={areaPath} fill="url(#sparkGrad)" />
+        {/* Line */}
+        <path d={path} fill="none" stroke="#F2B95F" strokeWidth="2.5" strokeLinecap="round" />
+        {/* Hover dot */}
+        {hoverIdx !== null && points[hoverIdx] && (
+          <circle cx={points[hoverIdx].x} cy={points[hoverIdx].y} r="5" fill="#F2B95F" stroke="#0E1117" strokeWidth="2" />
+        )}
+      </svg>
+      {/* Tooltip */}
+      {hoverIdx !== null && tooltipPos && points[hoverIdx] && (
+        <div
+          className="pointer-events-none absolute z-50 px-3 py-2 rounded-[6px] bg-[#1B202B] border border-[#2A313D] text-xs"
+          style={{ left: `${Math.min(Math.max(tooltipPos.x, 5), 90)}%`, top: '12px', transform: 'translateX(-50%)' }}
+        >
+          <p className="text-[#707A8A] font-mono mb-0.5">{points[hoverIdx].date}</p>
+          <p className="text-[#F5F7FA] font-semibold">{numberFormat.format(points[hoverIdx].clicks)} clicks</p>
+        </div>
+      )}
     </div>
   );
 }
@@ -161,7 +243,7 @@ export default function LinkDetailsPage() {
     setIsDeleting(true);
     try {
       await deleteUrl(id);
-      navigate('/app', {
+      navigate('/app/links', {
         state: { successNotification: { shortUrl: buildShortUrl(link?.shortCode || ''), title: link?.title || 'Untitled Link' } },
       });
     } catch (err) {
@@ -192,18 +274,21 @@ export default function LinkDetailsPage() {
   }, [timeseries]);
 
   const breakdowns = useMemo(() => {
-    if (!summary) return [];
-    return [
-      { title: 'Traffic Sources', items: (summary.topTrafficSources || []).map(d => ({ name: d.name, count: d.clicks, pct: pct(d.clicks, (summary.topTrafficSources || []).reduce((s, x) => s + x.clicks, 0)) })) },
-      { title: 'Devices', items: (summary.topDevices || []).map(d => ({ name: d.name, count: d.clicks, pct: pct(d.clicks, (summary.topDevices || []).reduce((s, x) => s + x.clicks, 0)) })) },
-      { title: 'Browsers', items: (summary.topBrowsers || []).map(d => ({ name: d.name, count: d.clicks, pct: pct(d.clicks, (summary.topBrowsers || []).reduce((s, x) => s + x.clicks, 0)) })) },
-      { title: 'Operating Systems', items: (summary.topOperatingSystems || []).map(d => ({ name: d.name, count: d.clicks, pct: pct(d.clicks, (summary.topOperatingSystems || []).reduce((s, x) => s + x.clicks, 0)) })) },
-    ];
+    if (!summary) return { sources: [], devices: [], browsers: [] };
+    const makeItems = (arr) => {
+      const sum = (arr || []).reduce((s, x) => s + x.clicks, 0);
+      return (arr || []).map(d => ({ name: d.name, count: d.clicks, pct: pct(d.clicks, sum) }));
+    };
+    return {
+      sources: makeItems(summary.topTrafficSources),
+      devices: makeItems(summary.topDevices),
+      browsers: makeItems(summary.topBrowsers),
+    };
   }, [summary]);
 
   if (isLoading) return <LoadingSkeleton />;
-  if (error) return <ErrorState message={error} onRetry={refresh} onBack={() => navigate('/app')} />;
-  if (!link) return <NotFoundState onBack={() => navigate('/app')} />;
+  if (error) return <ErrorState message={error} onRetry={refresh} onBack={() => navigate('/app/links')} />;
+  if (!link) return <NotFoundState onBack={() => navigate('/app/links')} />;
 
   const shortUrl = buildShortUrl(link.shortCode);
   const totalClicks = summary?.totalClicks ?? link.clickCount ?? 0;
@@ -225,7 +310,7 @@ export default function LinkDetailsPage() {
 
       {/* 1. LINK IDENTITY */}
       <section>
-        <button onClick={() => navigate('/app')} className="group flex items-center gap-1.5 text-[12px] font-medium text-[#707A8A] hover:text-[#F2B95F] transition-colors mb-5">
+        <button onClick={() => navigate('/app/links')} className="group flex items-center gap-1.5 text-[12px] font-medium text-[#707A8A] hover:text-[#F2B95F] transition-colors mb-5">
           <svg className="w-3.5 h-3.5 transition-transform group-hover:-translate-x-0.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
           Your links
         </button>
@@ -281,18 +366,8 @@ export default function LinkDetailsPage() {
           {timeseries?.interval && <span className="text-[10px] font-mono tracking-wider text-[#2A313D] uppercase">&middot; {timeseries.interval}</span>}
         </div>
         {hasAnalytics && chartData.length > 0 ? (
-          <div className="bg-[#151922] border border-[#2A313D] rounded-[10px] p-5 md:p-6">
-            <div className="h-64 md:h-72">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#1B202B" vertical={false} />
-                  <XAxis dataKey="date" tick={{ fill: '#707A8A', fontSize: 11, fontFamily: 'JetBrains Mono, monospace' }} axisLine={{ stroke: '#2A313D' }} tickLine={false} interval={Math.max(0, Math.floor(chartData.length / 7))} />
-                  <YAxis tick={{ fill: '#707A8A', fontSize: 11, fontFamily: 'JetBrains Mono, monospace' }} axisLine={false} tickLine={false} tickFormatter={formatNumber} width={40} />
-                  <Tooltip content={<ChartTooltip />} />
-                  <Line type="monotone" dataKey="clicks" stroke="#F2B95F" strokeWidth={2} dot={false} activeDot={{ r: 5, fill: '#F2B95F', stroke: '#0E1117', strokeWidth: 2 }} />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
+          <div className="relative overflow-hidden bg-[#0F141D] border border-[#2A313D] rounded-[8px] p-3 h-[240px] sm:h-[280px] lg:h-[300px]">
+            <SparklineChart data={chartData} label="Click activity" />
           </div>
         ) : (
           <div className="bg-[#151922] border border-[#2A313D] rounded-[10px] p-10 text-center">
@@ -307,27 +382,96 @@ export default function LinkDetailsPage() {
 
       {/* 4. TRAFFIC & AUDIENCE */}
       <section>
-        <span className="text-[10px] font-mono font-semibold tracking-[0.14em] uppercase text-[#707A8A] mb-4 block">Traffic &amp; Audience</span>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {breakdowns.map(({ title, items }) => (
-            <div key={title} className="bg-[#151922] border border-[#2A313D] rounded-[10px] p-5">
-              <p className="text-[10px] font-mono font-semibold tracking-[0.14em] uppercase text-[#707A8A] mb-4">{title}</p>
-              {items.length > 0 ? (
+        <div className="mb-4">
+          <span className="text-[10px] font-mono font-semibold tracking-[0.14em] uppercase text-[#707A8A]">Traffic &amp; Audience</span>
+          <p className="text-[11px] text-[#707A8A] mt-1">Based on tracked clicks</p>
+        </div>
+        {breakdowns.sources.length === 0 && breakdowns.devices.length === 0 && breakdowns.browsers.length === 0 ? (
+          <div className="bg-[#151922] border border-[#2A313D] rounded-[10px] p-10 text-center">
+            <p className="text-[#F5F7FA] text-sm font-semibold mb-1">No tracked analytics yet</p>
+            <p className="text-[#707A8A] text-[13px]">Analytics will appear after your link receives tracked clicks.</p>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {/* Row 1: Traffic Sources + Devices side by side */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Traffic Sources */}
+              <div className="bg-[#151922] border border-[#2A313D] rounded-[10px] p-5">
+                <p className="text-[10px] font-mono font-semibold tracking-[0.14em] uppercase text-[#707A8A] mb-4">Traffic Sources</p>
+                {breakdowns.sources.length > 0 ? (
+                  <div className="space-y-3">
+                    {breakdowns.sources.map((item, i) => (
+                      <div key={i}>
+                        <div className="flex items-center justify-between gap-3 mb-1.5">
+                          <span className="text-[13px] text-[#A8B0BD] truncate" title={item.name}>{item.name}</span>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span className="text-[11px] font-mono text-[#707A8A] tabular-nums">{numberFormat.format(item.count)} clicks</span>
+                            <span className="text-[11px] font-mono font-medium text-[#F5F7FA] w-10 text-right tabular-nums">{item.pct}%</span>
+                          </div>
+                        </div>
+                        <div className="h-1.5 rounded-full bg-[#1B202B] overflow-hidden">
+                          <div className="h-full rounded-full bg-[#F2B95F] transition-all duration-500" style={{ width: `${item.pct}%` }} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-[13px] text-[#707A8A]">No tracked traffic yet</p>
+                )}
+              </div>
+
+              {/* Devices */}
+              <div className="bg-[#151922] border border-[#2A313D] rounded-[10px] p-5">
+                <p className="text-[10px] font-mono font-semibold tracking-[0.14em] uppercase text-[#707A8A] mb-4">Devices</p>
+                {breakdowns.devices.length > 0 ? (
+                  <div className="space-y-3">
+                    {breakdowns.devices.map((item, i) => (
+                      <div key={i}>
+                        <div className="flex items-center justify-between gap-3 mb-1.5">
+                          <span className="text-[13px] text-[#A8B0BD] truncate" title={item.name}>{item.name}</span>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span className="text-[11px] font-mono text-[#707A8A] tabular-nums">{numberFormat.format(item.count)} clicks</span>
+                            <span className="text-[11px] font-mono font-medium text-[#F5F7FA] w-10 text-right tabular-nums">{item.pct}%</span>
+                          </div>
+                        </div>
+                        <div className="h-1.5 rounded-full bg-[#1B202B] overflow-hidden">
+                          <div className="h-full rounded-full bg-[#F2B95F] transition-all duration-500" style={{ width: `${item.pct}%` }} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-[13px] text-[#707A8A]">No tracked devices yet</p>
+                )}
+              </div>
+            </div>
+
+            {/* Row 2: Browsers full width */}
+            <div className="bg-[#151922] border border-[#2A313D] rounded-[10px] p-5">
+              <p className="text-[10px] font-mono font-semibold tracking-[0.14em] uppercase text-[#707A8A] mb-4">Browsers</p>
+              {breakdowns.browsers.length > 0 ? (
                 <div className="space-y-3">
-                  {items.map((item, i) => (
-                    <div key={i} className="flex items-center gap-3">
-                      <span className="text-[13px] text-[#A8B0BD] w-[120px] md:w-[140px] truncate shrink-0" title={item.name}>{item.name}</span>
-                      <div className="flex-1 min-w-0"><Bar value={item.count} max={items[0]?.count || 1} /></div>
-                      <span className="text-[11px] font-mono text-[#707A8A] w-10 text-right tabular-nums shrink-0">{item.pct}%</span>
+                  {breakdowns.browsers.map((item, i) => (
+                    <div key={i}>
+                      <div className="flex items-center justify-between gap-3 mb-1.5">
+                        <span className="text-[13px] text-[#A8B0BD] truncate" title={item.name}>{item.name}</span>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="text-[11px] font-mono text-[#707A8A] tabular-nums">{numberFormat.format(item.count)} clicks</span>
+                          <span className="text-[11px] font-mono font-medium text-[#F5F7FA] w-10 text-right tabular-nums">{item.pct}%</span>
+                        </div>
+                      </div>
+                      <div className="h-1.5 rounded-full bg-[#1B202B] overflow-hidden">
+                        <div className="h-full rounded-full bg-[#F2B95F] transition-all duration-500" style={{ width: `${item.pct}%` }} />
+                      </div>
                     </div>
                   ))}
                 </div>
               ) : (
-                <p className="text-[13px] text-[#707A8A]">No data yet</p>
+                <p className="text-[13px] text-[#707A8A]">No tracked browsers yet</p>
               )}
             </div>
-          ))}
-        </div>
+          </div>
+        )}
       </section>
 
       {/* 5. LINK METADATA */}

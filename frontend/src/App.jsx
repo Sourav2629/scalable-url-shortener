@@ -6,6 +6,7 @@ import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import AppShell from './pages/AppShell';
+import OverviewPage from './pages/OverviewPage';
 import LinksPage from './pages/LinksPage';
 import CreateLinkPage from './pages/CreateLinkPage';
 import LinkDetailsPage from './pages/LinkDetailsPage';
@@ -36,7 +37,8 @@ export default function App() {
               </ProtectedRoute>
             }
           >
-            <Route index element={<LinksPage />} />
+            <Route index element={<OverviewPage />} />
+            <Route path="links" element={<LinksPage />} />
             <Route path="links/new" element={<CreateLinkPage />} />
             <Route path="links/:id/edit" element={<CreateLinkPage />} />
             <Route path="links/:id" element={<LinkDetailsPage />} />
