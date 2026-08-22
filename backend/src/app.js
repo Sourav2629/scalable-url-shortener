@@ -4,11 +4,13 @@ const mongoose = require('mongoose');
 const AppError = require('./shared/errors/app-error');
 const { httpLogger } = require('./shared/logger');
 const { corsMiddleware } = require('./shared/middleware/cors.middleware');
-const { authLimiter, publicLimiter, apiLimiter } = require('./shared/middleware/rate-limiter.middleware');
+const { authLimiter, publicLimiter, publicShortenLimiter, apiLimiter } = require('./shared/middleware/rate-limiter.middleware');
 const authRoutes = require('./modules/auth/presentation/routes/auth.routes');
 const urlRoutes = require('./modules/urls/presentation/routes/url.routes');
 const analyticsRoutes = require('./modules/analytics/presentation/routes/analytics.routes');
 const publicUrlRoutes = require('./modules/urls/presentation/routes/public-url.routes');
+const publicCreateUrlRoutes = require('./modules/urls/presentation/routes/public-create-url.routes');
+const publicAliasCheckRoutes = require('./modules/urls/presentation/routes/public-alias-check.routes');
 
 const app = express();
 
@@ -39,6 +41,8 @@ app.get('/health/ready', (req, res) => {
 app.use('/api/v1/auth', authLimiter, authRoutes);
 app.use('/api/v1/urls', apiLimiter, urlRoutes);
 app.use('/api/v1/urls', apiLimiter, analyticsRoutes);
+app.use('/api/v1/public/urls', publicShortenLimiter, publicCreateUrlRoutes);
+app.use('/api/v1/public/urls', publicShortenLimiter, publicAliasCheckRoutes);
 
 app.use('/api/v1', (req, res, next) => {
   next(new AppError('Route not found', 404));

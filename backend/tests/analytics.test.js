@@ -144,7 +144,8 @@ describe('Analytics Module', () => {
       });
 
       test('formats top-N aggregation counts correctly', async () => {
-        mockUrlRepo.findByIdForOwner.mockResolvedValue({ _id: 'url1', owner: 'user1' });
+        // totalClicks always comes from the URL document's clickCount
+        mockUrlRepo.findByIdForOwner.mockResolvedValue({ _id: 'url1', owner: 'user1', clickCount: 5 });
         mockAnalyticsRepo.getSummary.mockResolvedValue([
           {
             totalClicks: 3,
@@ -156,7 +157,7 @@ describe('Analytics Module', () => {
         ]);
 
         const summary = await analyticsService.getSummary('user1', 'url1');
-        expect(summary.totalClicks).toBe(3);
+        expect(summary.totalClicks).toBe(5);
         expect(summary.topBrowsers).toEqual([
           { name: 'Chrome', clicks: 2 },
           { name: 'Firefox', clicks: 1 },

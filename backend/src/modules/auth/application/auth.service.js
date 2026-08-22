@@ -6,6 +6,7 @@ const PASSWORD_SALT_ROUNDS = 12;
 function serializeUser(user) {
   return {
     id: user._id.toString(),
+    name: user.name,
     email: user.email,
     isEmailVerified: user.isEmailVerified,
     createdAt: user.createdAt,
@@ -19,7 +20,7 @@ class AuthService {
     this.tokenService = tokenService;
   }
 
-  async register({ email, password }) {
+  async register({ name, email, password }) {
     const existingUser = await this.userRepository.findByEmail(email);
 
     if (existingUser) {
@@ -30,7 +31,7 @@ class AuthService {
     let user;
 
     try {
-      user = await this.userRepository.create({ email, password: passwordHash });
+      user = await this.userRepository.create({ name, email, password: passwordHash });
     } catch (error) {
       if (error.code === 11000) {
         throw new AppError('An account with this email already exists.', 409);

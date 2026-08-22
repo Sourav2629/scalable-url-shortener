@@ -213,8 +213,22 @@ function validateUrlId(req, res, next) {
   return next();
 }
 
+function validateCreatePublicUrl(req, res, next) {
+  try {
+    requireBodyObject(req.body);
+
+    const originalUrl = validateOriginalUrl(req.body.originalUrl);
+
+    req.body = { originalUrl };
+    return next();
+  } catch (error) {
+    return next(error);
+  }
+}
+
 module.exports = {
   validateCreateUrl,
+  validateCreatePublicUrl,
   validateUpdateUrl,
   validateUrlId,
 };

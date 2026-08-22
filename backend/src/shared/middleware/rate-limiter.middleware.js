@@ -27,6 +27,12 @@ const publicLimiter = createRateLimiter(
   'Too many requests from this IP, please try again later.'
 );
 
+const publicShortenLimiter = createRateLimiter(
+  config.rateLimit.getPublicShortenWindowMs(),
+  config.rateLimit.getPublicShortenMaxRequests(),
+  'Too many link creation requests, please try again later.'
+);
+
 const apiLimiter = createRateLimiter(
   config.rateLimit.getApiWindowMs(),
   config.rateLimit.getApiMaxRequests(),
@@ -36,5 +42,6 @@ const apiLimiter = createRateLimiter(
 module.exports = {
   authLimiter,
   publicLimiter,
+  publicShortenLimiter,
   apiLimiter,
 };

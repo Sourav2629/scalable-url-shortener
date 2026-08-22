@@ -35,13 +35,21 @@ class AnalyticsService {
 
   async getSummary(ownerId, urlId) {
     await this._verifyOwnership(ownerId, urlId);
+
+    // ALWAYS use the URL document's clickCount as the authoritative total.
+    // AnalyticsEvent may be incomplete if historical events weren't processed.
+    const url = await this.urlRepository.findByIdForOwner(urlId, ownerId);
+    const totalClicks = url ? (url.clickCount || 0) : 0;
+
     const result = await this.analyticsRepository.getSummary(urlId);
-    if (!result.length) return { urlId, totalClicks: 0, topBrowsers: [], topOperatingSystems: [], topDevices: [], topTrafficSources: [] };
-    
+    if (!result.length) {
+      return { urlId, totalClicks, topBrowsers: [], topOperatingSystems: [], topDevices: [], topTrafficSources: [] };
+    }
+
     const data = result[0];
     return {
       urlId,
-      totalClicks: data.totalClicks,
+      totalClicks,
       topBrowsers: this._count(data.topBrowsers),
       topOperatingSystems: this._count(data.topOS),
       topDevices: this._count(data.topDevices),

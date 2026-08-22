@@ -5,10 +5,22 @@ function createUrlController(urlService) {
 
       res.status(201).json({ url });
     },
-    getAll: async (req, res) => {
-      const urls = await urlService.getUserUrls(req.auth.userId);
+    createPublic: async (req, res) => {
+      const url = await urlService.createPublicUrl(req.body);
 
-      res.status(200).json({ urls });
+      res.status(201).json({ url });
+    },
+    getAll: async (req, res) => {
+      const { page = 1, limit = 20, search, sortBy = 'createdAt', sortOrder = 'desc' } = req.query;
+      const result = await urlService.getUserUrls(req.auth.userId, {
+        page: parseInt(page, 10),
+        limit: parseInt(limit, 10),
+        search,
+        sortBy,
+        sortOrder,
+      });
+
+      res.status(200).json(result);
     },
     getById: async (req, res) => {
       const url = await urlService.getUrlById(req.auth.userId, req.params.id);
@@ -37,6 +49,11 @@ function createUrlController(urlService) {
       } catch (error) {
         next(error);
       }
+    },
+    checkAliasAvailability: async (req, res) => {
+      const { alias } = req.params;
+      const result = await urlService.checkAliasAvailability(alias);
+      res.status(200).json(result);
     },
   };
 }

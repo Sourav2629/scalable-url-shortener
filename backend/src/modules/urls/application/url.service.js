@@ -22,7 +22,7 @@ function anonymizeIp(ip) {
 function serializeUrl(url) {
   return {
     id: url._id.toString(),
-    owner: url.owner.toString(),
+    owner: url.owner ? url.owner.toString() : null,
     originalUrl: url.originalUrl,
     shortCode: url.shortCode,
     title: url.title,
@@ -93,10 +93,45 @@ class UrlService {
     throw new AppError('Unable to generate a unique short code. Please try again.', 503);
   }
 
-  async getUserUrls(ownerId) {
-    const urls = await this.urlRepository.findByOwner(ownerId);
+  async createPublicUrl(urlData) {
+    const { originalUrl } = urlData;
 
-    return urls.map(serializeUrl);
+    for (let attempt = 0; attempt < MAX_SHORT_CODE_ATTEMPTS; attempt += 1) {
+      const shortCode = this.generateShortCode();
+      const shortCodeExists = await this.urlRepository.existsByShortCode(shortCode);
+
+      if (shortCodeExists) {
+        continue;
+      }
+
+      try {
+        const url = await this.urlRepository.create({
+          originalUrl,
+          owner: null,
+          shortCode,
+        });
+
+        return serializeUrl(url);
+      } catch (error) {
+        if (error.code !== 11000 && error.code !== 11001) {
+          throw error;
+        }
+      }
+    }
+
+    throw new AppError('Unable to generate a unique short code. Please try again.', 503);
+  }
+
+  async getUserUrls(ownerId, { page = 1, limit = 20, search, sortBy = 'createdAt', sortOrder = 'desc' } = {}) {
+    const { urls, total } = await this.urlRepository.findByOwner(ownerId, { page, limit, search, sortBy, sortOrder });
+    const totalPages = Math.ceil(total / limit);
+
+    return {
+      urls: urls.map(serializeUrl),
+      page,
+      total,
+      totalPages,
+    };
   }
 
   async getUrlById(ownerId, urlId) {
@@ -153,6 +188,11 @@ class UrlService {
     }
 
     return serializeUrl(url);
+  }
+
+  async checkAliasAvailability(alias) {
+    const exists = await this.urlRepository.existsByShortCode(alias);
+    return { available: !exists };
   }
 }
 

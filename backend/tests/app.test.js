@@ -47,4 +47,66 @@ describe('App Infrastructure & Routing', () => {
       expect(res.headers['access-control-allow-origin']).toBe('http://example.com');
     });
   });
+
+  describe('Public URL Shortening Endpoint', () => {
+    test('POST /api/v1/public/urls creates short URL without authentication', async () => {
+      const mockUrl = {
+        _id: '507f1f77bcf86cd799439011',
+        owner: null,
+        originalUrl: 'https://example.com/public-test',
+        shortCode: 'pubTest1',
+        clickCount: 0,
+        isActive: true,
+        isDeleted: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      const UrlRepository = require('../src/modules/urls/infrastructure/repositories/url.repository');
+      jest.spyOn(UrlRepository.prototype, 'existsByShortCode').mockResolvedValue(false);
+      jest.spyOn(UrlRepository.prototype, 'create').mockResolvedValue(mockUrl);
+
+      const res = await request(app)
+        .post('/api/v1/public/urls')
+        .send({ originalUrl: 'https://example.com/public-test' });
+
+      expect(res.statusCode).toBe(201);
+      expect(res.body.url).toBeDefined();
+      expect(res.body.url.shortCode).toBe('pubTest1');
+      expect(res.body.url.owner).toBeNull();
+    });
+
+    test('POST /api/v1/public/urls rejects invalid URL', async () => {
+      const res = await request(app)
+        .post('/api/v1/public/urls')
+        .send({ originalUrl: 'not-a-valid-url' });
+
+      expect(res.statusCode).toBe(400);
+    });
+
+    test('POST /api/v1/public/urls ignores unsupported fields like customAlias', async () => {
+      const mockUrl = {
+        _id: '507f1f77bcf86cd799439012',
+        owner: null,
+        originalUrl: 'https://example.com/ignored-fields',
+        shortCode: 'pubTest2',
+        clickCount: 0,
+        isActive: true,
+        isDeleted: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      const UrlRepository = require('../src/modules/urls/infrastructure/repositories/url.repository');
+      jest.spyOn(UrlRepository.prototype, 'existsByShortCode').mockResolvedValue(false);
+      jest.spyOn(UrlRepository.prototype, 'create').mockResolvedValue(mockUrl);
+
+      const res = await request(app)
+        .post('/api/v1/public/urls')
+        .send({ originalUrl: 'https://example.com/ignored-fields', customAlias: 'should-be-ignored', title: 'ignored' });
+
+      expect(res.statusCode).toBe(201);
+      expect(res.body.url.shortCode).toBe('pubTest2');
+    });
+  });
 });

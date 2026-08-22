@@ -52,6 +52,8 @@ const config = {
     getAuthWindowMs: () => parseInt(getOptionalEnvironmentVariable('RATE_LIMIT_AUTH_WINDOW_MS', '900000'), 10), // 15 mins
     getPublicMaxRequests: () => parseInt(getOptionalEnvironmentVariable('RATE_LIMIT_PUBLIC_MAX', '100'), 10),
     getPublicWindowMs: () => parseInt(getOptionalEnvironmentVariable('RATE_LIMIT_PUBLIC_WINDOW_MS', '60000'), 10), // 1 min
+    getPublicShortenMaxRequests: () => parseInt(getOptionalEnvironmentVariable('RATE_LIMIT_PUBLIC_SHORTEN_MAX', '10'), 10),
+    getPublicShortenWindowMs: () => parseInt(getOptionalEnvironmentVariable('RATE_LIMIT_PUBLIC_SHORTEN_WINDOW_MS', '60000'), 10), // 1 min
     getApiMaxRequests: () => parseInt(getOptionalEnvironmentVariable('RATE_LIMIT_API_MAX', '300'), 10),
     getApiWindowMs: () => parseInt(getOptionalEnvironmentVariable('RATE_LIMIT_API_WINDOW_MS', '900000'), 10), // 15 mins
   },

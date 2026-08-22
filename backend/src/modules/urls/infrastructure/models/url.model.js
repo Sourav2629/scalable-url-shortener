@@ -5,7 +5,8 @@ const urlSchema = new mongoose.Schema(
     owner: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
-      required: true,
+      default: null,
+      required: false,
     },
     originalUrl: {
       type: String,

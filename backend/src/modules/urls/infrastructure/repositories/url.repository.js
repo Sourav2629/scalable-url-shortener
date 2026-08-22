@@ -5,8 +5,38 @@ class UrlRepository {
     return Url.create(urlData);
   }
 
-  async findByOwner(ownerId) {
-    return Url.find({ owner: ownerId, isDeleted: false }).sort({ createdAt: -1 });
+  async findByOwner(ownerId, { page = 1, limit = 20, search, sortBy = 'createdAt', sortOrder = 'desc' } = {}) {
+    const skip = (page - 1) * limit;
+
+    const query = { owner: ownerId, isDeleted: false };
+
+    if (search && typeof search === 'string' && search.trim()) {
+      const escaped = search.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = new RegExp(escaped, 'i');
+      query.$or = [
+        { shortCode: regex },
+        { originalUrl: regex },
+        { title: regex },
+      ];
+    }
+
+    const VALID_SORT_FIELDS = ['createdAt', 'clickCount', 'title', 'shortCode'];
+    const field = VALID_SORT_FIELDS.includes(sortBy) ? sortBy : 'createdAt';
+    const direction = sortOrder === 'asc' ? 1 : -1;
+    const sortObj = { [field]: direction };
+
+    const findQuery = Url.find(query).sort(sortObj).skip(skip).limit(limit);
+
+    if (field === 'title') {
+      findQuery.collation({ locale: 'en', strength: 2 });
+    }
+
+    const [urls, total] = await Promise.all([
+      findQuery,
+      Url.countDocuments(query),
+    ]);
+
+    return { urls, total };
   }
 
   async findByIdForOwner(id, ownerId) {

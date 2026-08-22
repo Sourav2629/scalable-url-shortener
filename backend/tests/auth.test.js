@@ -7,30 +7,31 @@ process.env.JWT_REFRESH_SECRET = 'test_refresh_secret';
 const app = require('../src/app');
 const tokenService = require('../src/modules/auth/infrastructure/jwt/token.service');
 const { authenticate } = require('../src/modules/auth/presentation/middleware/auth.middleware');
-const { validateCredentials } = require('../src/modules/auth/presentation/validators/auth.validator');
+const { validateRegister } = require('../src/modules/auth/presentation/validators/auth.validator');
 const config = require('../src/config');
 
 describe('Auth & JWT Middleware', () => {
-  describe('Credentials Validator', () => {
+  describe('Register Validator', () => {
     test('rejects missing or invalid email', () => {
       const req = { body: { email: 'invalid-email', password: 'password123' } };
       const next = jest.fn();
-      validateCredentials(req, {}, next);
+      validateRegister(req, {}, next);
       expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400 }));
     });
 
     test('rejects short password (< 8 chars)', () => {
       const req = { body: { email: 'test@example.com', password: 'short' } };
       const next = jest.fn();
-      validateCredentials(req, {}, next);
+      validateRegister(req, {}, next);
       expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400 }));
     });
 
     test('normalizes valid email to lowercase and trimmed', () => {
-      const req = { body: { email: '  Test@Example.COM ', password: 'validpassword' } };
+      const req = { body: { name: 'John Doe', email: '  Test@Example.COM ', password: 'validpassword' } };
       const next = jest.fn();
-      validateCredentials(req, {}, next);
+      validateRegister(req, {}, next);
       expect(req.body.email).toBe('test@example.com');
+      expect(req.body.name).toBe('John Doe');
       expect(next).toHaveBeenCalledWith();
     });
   });
