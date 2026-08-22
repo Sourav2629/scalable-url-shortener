@@ -36,8 +36,7 @@ export default function HomePage() {
         setErrorMsg('Unexpected response from server. Please try again.');
       }
     } catch (err) {
-      console.error('URL shortening error:', err);
-      const message = err.response?.data?.error?.message || err.message || 'Failed to shorten URL. Please check server connection.';
+      const message = err.response?.data?.message || err.message || 'Failed to shorten URL. Please check server connection.';
       setErrorMsg(message);
     } finally {
       setIsSubmitting(false);

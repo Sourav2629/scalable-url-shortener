@@ -18,6 +18,104 @@ describe('URL Service & Public Redirect Logic', () => {
     });
   });
 
+  describe('Edge Case Regression Tests', () => {
+    let mockUrlRepo;
+    let mockAnalyticsPublisher;
+    let mockGenerateShortCode;
+    let urlService;
+
+    beforeEach(() => {
+      mockUrlRepo = {
+        create: jest.fn(),
+        findByOwner: jest.fn(),
+        findByIdForOwner: jest.fn(),
+        updateByIdForOwner: jest.fn(),
+        softDeleteByIdForOwner: jest.fn(),
+        existsByShortCode: jest.fn(),
+        findByShortCode: jest.fn(),
+        incrementClickCount: jest.fn(),
+      };
+      mockAnalyticsPublisher = { publishClickEvent: jest.fn() };
+      mockGenerateShortCode = jest.fn().mockReturnValue('abc12345');
+      urlService = new UrlService(mockUrlRepo, mockGenerateShortCode, mockAnalyticsPublisher);
+    });
+
+    test('getUrlById returns 404 for nonexistent URL (valid ObjectId, not found)', async () => {
+      mockUrlRepo.findByIdForOwner.mockResolvedValue(null);
+      await expect(urlService.getUrlById('user1', '507f1f77bcf86cd799439011')).rejects.toThrow(
+        expect.objectContaining({ statusCode: 404 })
+      );
+    });
+
+    test('updateUrl returns 404 for nonexistent URL', async () => {
+      mockUrlRepo.updateByIdForOwner.mockResolvedValue(null);
+      await expect(urlService.updateUrl('user1', '507f1f77bcf86cd799439011', { title: 'new' })).rejects.toThrow(
+        expect.objectContaining({ statusCode: 404 })
+      );
+    });
+
+    test('deleteUrl returns 404 for nonexistent URL', async () => {
+      mockUrlRepo.softDeleteByIdForOwner.mockResolvedValue(null);
+      await expect(urlService.deleteUrl('user1', '507f1f77bcf86cd799439011')).rejects.toThrow(
+        expect.objectContaining({ statusCode: 404 })
+      );
+    });
+
+    test('getUrlByShortCode returns 404 for deleted URL', async () => {
+      mockUrlRepo.findByShortCode.mockResolvedValue({ isDeleted: true, isActive: true });
+      await expect(urlService.getUrlByShortCode('deleted1')).rejects.toThrow(
+        expect.objectContaining({ statusCode: 404 })
+      );
+    });
+
+    test('getUrlByShortCode returns 404 for inactive URL', async () => {
+      mockUrlRepo.findByShortCode.mockResolvedValue({ isDeleted: false, isActive: false });
+      await expect(urlService.getUrlByShortCode('inactive1')).rejects.toThrow(
+        expect.objectContaining({ statusCode: 404 })
+      );
+    });
+
+    test('getUrlByShortCode returns 404 for expired URL', async () => {
+      mockUrlRepo.findByShortCode.mockResolvedValue({
+        isDeleted: false, isActive: true, expiresAt: new Date(Date.now() - 86400000),
+      });
+      await expect(urlService.getUrlByShortCode('expired1')).rejects.toThrow(
+        expect.objectContaining({ statusCode: 404 })
+      );
+    });
+
+    test('getUrlByShortCode does NOT increment click count for inactive URL', async () => {
+      mockUrlRepo.findByShortCode.mockResolvedValue({ isDeleted: false, isActive: false });
+      await expect(urlService.getUrlByShortCode('inactive1')).rejects.toThrow();
+      expect(mockUrlRepo.incrementClickCount).not.toHaveBeenCalled();
+    });
+
+    test('getUrlByShortCode does NOT increment click count for deleted URL', async () => {
+      mockUrlRepo.findByShortCode.mockResolvedValue({ isDeleted: true, isActive: true });
+      await expect(urlService.getUrlByShortCode('deleted1')).rejects.toThrow();
+      expect(mockUrlRepo.incrementClickCount).not.toHaveBeenCalled();
+    });
+
+    test('createUrl throws 409 for duplicate custom alias (race condition)', async () => {
+      mockUrlRepo.existsByShortCode.mockResolvedValue(false);
+      const dupError = new Error('Duplicate key');
+      dupError.code = 11000;
+      mockUrlRepo.create.mockRejectedValue(dupError);
+
+      await expect(urlService.createUrl('user1', {
+        originalUrl: 'https://example.com', customAlias: 'taken-alias',
+      })).rejects.toThrow(expect.objectContaining({ statusCode: 409 }));
+    });
+
+    test('createUrl throws 503 when all short code attempts fail', async () => {
+      mockUrlRepo.existsByShortCode.mockResolvedValue(true);
+
+      await expect(urlService.createUrl('user1', { originalUrl: 'https://example.com' })).rejects.toThrow(
+        expect.objectContaining({ statusCode: 503 })
+      );
+    });
+  });
+
   describe('URL Validators', () => {
     test('validateCreateUrl rejects invalid URL', () => {
       const req = { body: { originalUrl: 'not-a-url' } };
@@ -346,6 +444,100 @@ describe('URL Service & Public Redirect Logic', () => {
 
       const result = await serviceWithFailingPublisher.getUrlByShortCode('valid123', { ip: '127.0.0.1' });
       expect(result).toBe('https://destination.com');
+    });
+
+    describe('Cross-User Ownership Enforcement', () => {
+      test('getUrlById returns 404 when user does not own the link', async () => {
+        // User A creates a link, User B tries to access it
+        mockUrlRepo.findByIdForOwner.mockImplementation((id, ownerId) => {
+          // Only return the URL when the correct owner queries it
+          if (ownerId === 'userA') {
+            return Promise.resolve({
+              _id: id,
+              owner: 'userA',
+              originalUrl: 'https://example.com',
+              shortCode: 'owned123',
+              clickCount: 10,
+              isActive: true,
+              isDeleted: false,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            });
+          }
+          // Wrong owner — repository returns null
+          return Promise.resolve(null);
+        });
+
+        // User A can access their own link
+        const ownedUrl = await urlService.getUrlById('userA', 'link1');
+        expect(ownedUrl.shortCode).toBe('owned123');
+
+        // User B cannot access User A's link
+        await expect(urlService.getUrlById('userB', 'link1')).rejects.toThrow(
+          expect.objectContaining({ statusCode: 404 })
+        );
+      });
+
+      test('updateUrl returns 404 when user does not own the link', async () => {
+        mockUrlRepo.updateByIdForOwner.mockImplementation((id, ownerId, updates) => {
+          if (ownerId === 'userA') {
+            return Promise.resolve({
+              _id: id, owner: 'userA', originalUrl: 'https://updated.com',
+              shortCode: 'owned123', clickCount: 10, isActive: true, isDeleted: false,
+              createdAt: new Date(), updatedAt: new Date(),
+            });
+          }
+          return Promise.resolve(null);
+        });
+
+        // User A can update
+        const updated = await urlService.updateUrl('userA', 'link1', { originalUrl: 'https://updated.com' });
+        expect(updated.originalUrl).toBe('https://updated.com');
+
+        // User B cannot update User A's link
+        await expect(urlService.updateUrl('userB', 'link1', { originalUrl: 'https://hacked.com' })).rejects.toThrow(
+          expect.objectContaining({ statusCode: 404 })
+        );
+      });
+
+      test('deleteUrl returns 404 when user does not own the link', async () => {
+        mockUrlRepo.softDeleteByIdForOwner.mockImplementation((id, ownerId) => {
+          if (ownerId === 'userA') {
+            return Promise.resolve({ _id: id });
+          }
+          return Promise.resolve(null);
+        });
+
+        // User A can delete
+        await expect(urlService.deleteUrl('userA', 'link1')).resolves.toBeUndefined();
+
+        // User B cannot delete User A's link
+        await expect(urlService.deleteUrl('userB', 'link1')).rejects.toThrow(
+          expect.objectContaining({ statusCode: 404 })
+        );
+      });
+
+      test('getUserUrls only returns links owned by the requesting user', async () => {
+        mockUrlRepo.findByOwner.mockImplementation((ownerId) => {
+          if (ownerId === 'userA') {
+            return Promise.resolve({
+              urls: [{
+                _id: 'a1', owner: 'userA', shortCode: 'aLink', originalUrl: 'https://a.com',
+                clickCount: 5, isActive: true, isDeleted: false, createdAt: new Date(), updatedAt: new Date(),
+              }],
+              total: 1,
+            });
+          }
+          return Promise.resolve({ urls: [], total: 0 });
+        });
+
+        const userAResult = await urlService.getUserUrls('userA');
+        expect(userAResult.urls).toHaveLength(1);
+        expect(userAResult.urls[0].shortCode).toBe('aLink');
+
+        const userBResult = await urlService.getUserUrls('userB');
+        expect(userBResult.urls).toHaveLength(0);
+      });
     });
 
     describe('getUserUrls - search and sort forwarding', () => {

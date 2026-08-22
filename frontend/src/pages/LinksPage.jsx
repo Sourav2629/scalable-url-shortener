@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useLinks } from '../hooks/useLinks';
 import { formatDistanceToNow } from 'date-fns';
@@ -56,7 +56,7 @@ export default function LinksPage() {
       await navigator.clipboard.writeText(shortUrl);
       // Could add a toast here, but keeping it simple
     } catch (err) {
-      console.error('Failed to copy:', err);
+
     } finally {
       dismissNotification();
     }
@@ -96,6 +96,20 @@ export default function LinksPage() {
   const handleDeleteClick = (link) => {
     setShowDeleteConfirm(link);
   };
+
+  const closeDeleteModal = useCallback(() => {
+    if (!deleteLoading) setShowDeleteConfirm(null);
+  }, [deleteLoading]);
+
+  // Close modal on Escape key
+  useEffect(() => {
+    if (!showDeleteConfirm) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') closeDeleteModal();
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [showDeleteConfirm, closeDeleteModal]);
 
   const confirmDelete = async () => {
     if (!showDeleteConfirm) return;
@@ -623,8 +637,9 @@ export default function LinksPage() {
         aria-modal="true"
         aria-labelledby="delete-modal-title"
         aria-describedby="delete-modal-description"
+        onClick={closeDeleteModal}
       >
-        <div className="w-full max-w-md bg-[#151922] border border-[#2A313D] rounded-[14px] overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+        <div className="w-full max-w-md bg-[#151922] border border-[#2A313D] rounded-[14px] overflow-hidden animate-in fade-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
           <div className="px-6 py-5 border-b border-[#2A313D]">
             <h2 id="delete-modal-title" className="text-lg font-semibold text-[#F5F7FA]">
               Delete link
@@ -632,7 +647,7 @@ export default function LinksPage() {
           </div>
           <div className="px-6 py-5">
             <p id="delete-modal-description" className="text-[#A8B0BD] leading-relaxed">
-              Are you sure you want to delete <code className="text-[#F2B95F] font-mono bg-[#1B202B] px-1.5 py-0.5 rounded-[4px] border border-[#2A313D]">linksphere.app/{showDeleteConfirm.shortCode}</code>? This action cannot be undone.
+              Are you sure you want to delete <code className="text-[#F2B95F] font-mono bg-[#1B202B] px-1.5 py-0.5 rounded-[4px] border border-[#2A313D]">{buildShortUrl(showDeleteConfirm.shortCode)}</code>? This action cannot be undone.
             </p>
           </div>
           <div className="px-6 py-4 border-t border-[#2A313D] bg-[#1B202B]/40 flex justify-end gap-3">

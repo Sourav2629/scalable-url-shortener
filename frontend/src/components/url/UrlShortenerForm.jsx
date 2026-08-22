@@ -40,7 +40,7 @@ export default function UrlShortenerForm({ onSubmit, onShortenSuccess, isLoading
       await submitFn(trimmed);
       setUrlInput('');
     } catch (err) {
-      const msg = err.response?.data?.error?.message || err.response?.data?.message || err.message || 'Failed to shorten URL. Please try again.';
+      const msg = err.response?.data?.message || err.response?.data?.error?.message || err.message || 'Failed to shorten URL. Please try again.';
       setLocalError(msg);
     } finally {
       setInternalLoading(false);

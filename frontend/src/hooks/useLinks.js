@@ -58,7 +58,7 @@ export function useLinks() {
         totalPages: data.totalPages || 0,
       }));
     } catch (err) {
-      setError(err.response?.data?.error?.message || err.message || 'Failed to fetch links');
+      setError(err.response?.data?.message || err.message || 'Failed to fetch links');
       setLinks([]);
     } finally {
       setIsLoading(false);
@@ -74,7 +74,7 @@ export function useLinks() {
       setPagination((prev) => ({ ...prev, total: prev.total + 1 }));
       return newLink;
     } catch (err) {
-      setError(err.response?.data?.error?.message || err.message || 'Failed to create link');
+      setError(err.response?.data?.message || err.message || 'Failed to create link');
       throw err;
     } finally {
       setIsLoading(false);
@@ -89,7 +89,7 @@ export function useLinks() {
       setLinks((prev) => prev.map((link) => (link.id === id ? updatedLink : link)));
       return updatedLink;
     } catch (err) {
-      setError(err.response?.data?.error?.message || err.message || 'Failed to update link');
+      setError(err.response?.data?.message || err.message || 'Failed to update link');
       throw err;
     } finally {
       setIsLoading(false);
@@ -104,7 +104,7 @@ export function useLinks() {
       setLinks((prev) => prev.filter((link) => link.id !== id));
       setPagination((prev) => ({ ...prev, total: prev.total - 1 }));
     } catch (err) {
-      setError(err.response?.data?.error?.message || err.message || 'Failed to delete link');
+      setError(err.response?.data?.message || err.message || 'Failed to delete link');
       throw err;
     } finally {
       setIsLoading(false);
@@ -118,7 +118,7 @@ export function useLinks() {
       const link = await getUrlById(id);
       return link;
     } catch (err) {
-      setError(err.response?.data?.error?.message || err.message || 'Failed to fetch link');
+      setError(err.response?.data?.message || err.message || 'Failed to fetch link');
       throw err;
     } finally {
       setIsLoading(false);

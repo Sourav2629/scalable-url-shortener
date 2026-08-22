@@ -30,6 +30,29 @@ describe('App Infrastructure & Routing', () => {
       expect(res.body).toEqual({ message: 'Route not found' });
     });
 
+    test('error response uses { message } at top level (not nested)', async () => {
+      const res = await request(app).get('/api/v1/nonexistent');
+      expect(res.body).toHaveProperty('message');
+      expect(res.body).not.toHaveProperty('error');
+    });
+
+    test('unauthenticated access to protected endpoint returns 401', async () => {
+      const res = await request(app).get('/api/v1/urls');
+      expect(res.statusCode).toBe(401);
+      expect(res.body.message).toBeDefined();
+    });
+
+    test('malformed ObjectId returns 400', async () => {
+      const token = require('../src/modules/auth/infrastructure/jwt/token.service').generateAccessToken('testuser');
+      const res = await request(app)
+        .get('/api/v1/urls/not-a-valid-id')
+        .set('Authorization', `Bearer ${token}`);
+      expect(res.statusCode).toBe(400);
+      expect(res.body.message).toBeDefined();
+    });
+
+
+
     test('GET /nonexistent-page-route returns 404 for public redirect route', async () => {
       jest.spyOn(UrlRepository.prototype, 'findByShortCode').mockResolvedValue(null);
       const res = await request(app).get('/nonexistent-page-route');

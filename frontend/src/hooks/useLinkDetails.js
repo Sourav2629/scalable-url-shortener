@@ -25,7 +25,7 @@ export function useLinkDetails(id) {
       const linkData = await getUrlById(id);
       setLink(linkData);
     } catch (err) {
-      setError(err.response?.data?.error?.message || err.message || 'Failed to fetch link');
+      setError(err.response?.data?.message || err.message || 'Failed to fetch link');
       throw err;
     } finally {
       setIsLoading(false);
@@ -38,7 +38,7 @@ export function useLinkDetails(id) {
       const summaryData = await getUrlAnalyticsSummary(id);
       setSummary(summaryData);
     } catch (err) {
-      console.error('Failed to fetch analytics summary:', err);
+
     }
   }, [id]);
 
@@ -48,7 +48,7 @@ export function useLinkDetails(id) {
       const timeseriesData = await getUrlAnalyticsTimeseries(id, { from, to, interval });
       setTimeseries(timeseriesData);
     } catch (err) {
-      console.error('Failed to fetch timeseries:', err);
+
     }
   }, [id]);
 

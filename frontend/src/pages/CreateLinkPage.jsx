@@ -1,6 +1,5 @@
 ﻿import { useState, useEffect, useCallback, useRef, useId } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
 import { useLinks } from '../hooks/useLinks';
 import { checkAliasAvailability } from '../services/url.service';
 import { buildShortUrl } from '../utils/url-builder';
@@ -245,7 +244,6 @@ function ToggleSwitch({ id, name, checked, onChange, disabled, label }) {
 export default function CreateLinkPage() {
   const navigate = useNavigate();
   const { id } = useParams();
-  const { user, isAuthenticated } = useAuth();
   const { createLink, updateLink, getLink } = useLinks();
 
   const isEditMode = Boolean(id);
@@ -397,7 +395,7 @@ export default function CreateLinkPage() {
         },
       });
     } catch (err) {
-      const message = err.response?.data?.error?.message || err.message;
+      const message = err.response?.data?.message || err.message;
       setGeneralError(message || (isEditMode ? 'Failed to update link.' : 'Failed to create link.'));
     } finally {
       setIsSubmitting(false);

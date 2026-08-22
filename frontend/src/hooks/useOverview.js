@@ -28,7 +28,7 @@ export function useOverview() {
       setTotal(typeof data.total === 'number' ? data.total : (data.urls || []).length);
     } catch (err) {
       setError(
-        err.response?.data?.error?.message ||
+        err.response?.data?.message ||
           "We couldn't load your workspace. Check your connection and try again."
       );
       setLinks([]);

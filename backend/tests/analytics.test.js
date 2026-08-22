@@ -1,4 +1,5 @@
 const AnalyticsService = require('../src/modules/analytics/application/analytics.service');
+const AnalyticsPublisher = require('../src/modules/analytics/application/analytics.publisher');
 const { parseUserAgent } = require('../src/modules/analytics/utils/ua-parser');
 const { classifyReferrer } = require('../src/modules/analytics/utils/referrer-classifier');
 const AppError = require('../src/shared/errors/app-error');
@@ -128,6 +129,40 @@ describe('Analytics Module', () => {
         );
       });
 
+      test('User B cannot access User A analytics — ownership enforced', async () => {
+        // User A owns the URL — their query returns the document
+        mockUrlRepo.findByIdForOwner.mockImplementation((id, ownerId) => {
+          if (ownerId === 'userA') {
+            return Promise.resolve({ _id: id, owner: 'userA', clickCount: 10 });
+          }
+          // User B queries the same ID — wrong owner, returns null
+          return Promise.resolve(null);
+        });
+
+        mockAnalyticsRepo.getSummary.mockResolvedValue([
+          {
+            totalClicks: 10,
+            topBrowsers: ['Chrome'],
+            topOS: ['Windows'],
+            topDevices: ['Desktop'],
+            topSources: ['Direct'],
+          },
+        ]);
+
+        // User A can get their analytics
+        const summary = await analyticsService.getSummary('userA', 'url1');
+        expect(summary.totalClicks).toBe(10);
+        expect(summary.topBrowsers).toEqual([{ name: 'Chrome', clicks: 1 }]);
+
+        // User B cannot get User A's analytics — throws 404
+        await expect(analyticsService.getSummary('userB', 'url1')).rejects.toThrow(
+          expect.objectContaining({ statusCode: 404 })
+        );
+
+        // User B's query must have been called with the correct params
+        expect(mockUrlRepo.findByIdForOwner).toHaveBeenCalledWith('url1', 'userB');
+      });
+
       test('returns default empty summary when no analytics data exists', async () => {
         mockUrlRepo.findByIdForOwner.mockResolvedValue({ _id: 'url1', owner: 'user1' });
         mockAnalyticsRepo.getSummary.mockResolvedValue([]);
@@ -186,6 +221,28 @@ describe('Analytics Module', () => {
         ).rejects.toThrow(expect.objectContaining({ statusCode: 400 }));
       });
 
+      test('User B cannot access User A timeseries — ownership enforced', async () => {
+        mockUrlRepo.findByIdForOwner.mockImplementation((id, ownerId) => {
+          if (ownerId === 'userA') {
+            return Promise.resolve({ _id: id, owner: 'userA' });
+          }
+          return Promise.resolve(null);
+        });
+
+        mockAnalyticsRepo.getTimeseries.mockResolvedValue([
+          { _id: '2026-08-20', clicks: 5 },
+        ]);
+
+        // User A can get timeseries
+        const ts = await analyticsService.getTimeseries('userA', 'url1', '2026-08-20', '2026-08-21', 'day');
+        expect(ts.data).toHaveLength(1);
+
+        // User B cannot
+        await expect(
+          analyticsService.getTimeseries('userB', 'url1', '2026-08-20', '2026-08-21', 'day')
+        ).rejects.toThrow(expect.objectContaining({ statusCode: 404 }));
+      });
+
       test('returns timeseries data for valid date range', async () => {
         mockUrlRepo.findByIdForOwner.mockResolvedValue({ _id: 'url1', owner: 'user1' });
         mockAnalyticsRepo.getTimeseries.mockResolvedValue([
@@ -205,6 +262,153 @@ describe('Analytics Module', () => {
         expect(res.interval).toBe('day');
         expect(res.data).toHaveLength(2);
       });
+    });
+
+    describe('Worker Processing — Enrichment & Idempotency', () => {
+      test('processClickEvent enriches event with browser/os/device/traffic source', async () => {
+        const event = {
+          eventId: 'evt-enrich-1',
+          urlId: 'url1',
+          shortCode: 'abc',
+          timestamp: new Date(),
+          userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          referrer: 'https://google.com/search?q=test',
+        };
+        mockAnalyticsRepo.create.mockResolvedValue(event);
+
+        await analyticsService.processClickEvent(event);
+
+        expect(mockAnalyticsRepo.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            eventId: 'evt-enrich-1',
+            metadata: expect.objectContaining({
+              browser: 'Chrome',
+              os: 'Windows',
+              deviceType: 'Desktop',
+              trafficSource: 'Search',
+            }),
+          })
+        );
+      });
+
+      test('processClickEvent is idempotent — duplicate eventId is silently ignored', async () => {
+        const event = { eventId: 'evt-dup-1', urlId: 'url1', shortCode: 'abc' };
+        const dupError = new Error('E11000 duplicate key error');
+        dupError.code = 11000;
+
+        mockAnalyticsRepo.create
+          .mockResolvedValueOnce(event) // first call succeeds
+          .mockRejectedValueOnce(dupError); // second call is duplicate
+
+        // First call succeeds
+        await analyticsService.processClickEvent(event);
+        expect(mockAnalyticsRepo.create).toHaveBeenCalledTimes(1);
+
+        // Second call with same eventId does NOT throw
+        await expect(analyticsService.processClickEvent(event)).resolves.toBeUndefined();
+        expect(mockAnalyticsRepo.create).toHaveBeenCalledTimes(2);
+      });
+
+      test('processClickEvent re-throws non-duplicate MongoDB errors', async () => {
+        const event = { eventId: 'evt-fail-1', urlId: 'url1', shortCode: 'abc' };
+        mockAnalyticsRepo.create.mockRejectedValue(new Error('MongoServerSelectionError'));
+
+        await expect(analyticsService.processClickEvent(event)).rejects.toThrow('MongoServerSelectionError');
+      });
+
+      test('processClickEvent handles events with no referrer (Direct traffic)', async () => {
+        const event = {
+          eventId: 'evt-direct-1',
+          urlId: 'url1',
+          shortCode: 'abc',
+          userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X)',
+          referrer: null,
+        };
+        mockAnalyticsRepo.create.mockResolvedValue(event);
+
+        await analyticsService.processClickEvent(event);
+
+        expect(mockAnalyticsRepo.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            metadata: expect.objectContaining({
+              os: 'iOS',
+              deviceType: 'Mobile',
+              trafficSource: 'Direct',
+            }),
+          })
+        );
+      });
+    });
+
+    describe('API Resilience — clickCount vs AnalyticsEvent', () => {
+      test('getSummary uses clickCount as authoritative total, not AnalyticsEvent count', async () => {
+        // Simulate: 16 total clicks, but only 5 analytics events processed
+        mockUrlRepo.findByIdForOwner.mockResolvedValue({ _id: 'url1', owner: 'user1', clickCount: 16 });
+        mockAnalyticsRepo.getSummary.mockResolvedValue([{
+          totalClicks: 5,
+          topBrowsers: ['Chrome', 'Chrome', 'Chrome', 'Chrome', 'Chrome'],
+          topOS: ['Windows', 'Windows', 'Windows', 'Windows', 'Windows'],
+          topDevices: ['Desktop', 'Desktop', 'Desktop', 'Desktop', 'Desktop'],
+          topSources: ['Direct', 'Direct', 'Direct', 'Direct', 'Direct'],
+        }]);
+
+        const summary = await analyticsService.getSummary('user1', 'url1');
+
+        // totalClicks must be 16 (from Url.clickCount), NOT 5 (from AnalyticsEvent)
+        expect(summary.totalClicks).toBe(16);
+        // But breakdowns come from the 5 tracked events
+        expect(summary.topBrowsers).toEqual([{ name: 'Chrome', clicks: 5 }]);
+      });
+
+      test('getSummary returns empty breakdowns when no analytics events exist', async () => {
+        mockUrlRepo.findByIdForOwner.mockResolvedValue({ _id: 'url1', owner: 'user1', clickCount: 10 });
+        mockAnalyticsRepo.getSummary.mockResolvedValue([]);
+
+        const summary = await analyticsService.getSummary('user1', 'url1');
+
+        expect(summary.totalClicks).toBe(10);
+        expect(summary.topBrowsers).toEqual([]);
+        expect(summary.topDevices).toEqual([]);
+        expect(summary.topTrafficSources).toEqual([]);
+      });
+    });
+  });
+
+  describe('AnalyticsPublisher — Redis Failure Isolation', () => {
+    test('publishClickEvent does NOT throw when queue.add fails (Redis unavailable)', async () => {
+      const publisher = new AnalyticsPublisher();
+      const { analyticsQueue } = require('../src/infrastructure/queue/analytics.queue');
+      const spy = jest.spyOn(analyticsQueue, 'add').mockRejectedValue(new Error('ECONNREFUSED'));
+
+      // Must NOT throw — the redirect flow is isolated from queue failures
+      await expect(publisher.publishClickEvent({
+        eventId: 'test-event-1',
+        urlId: 'url1',
+        shortCode: 'abc',
+        timestamp: new Date(),
+        userAgent: 'test',
+      })).resolves.toBeUndefined();
+
+      spy.mockRestore();
+    });
+
+    test('publishClickEvent passes correct job configuration', async () => {
+      const publisher = new AnalyticsPublisher();
+      const { analyticsQueue } = require('../src/infrastructure/queue/analytics.queue');
+      const spy = jest.spyOn(analyticsQueue, 'add').mockResolvedValue({});
+
+      const event = { eventId: 'evt-123', urlId: 'url1', shortCode: 'abc', timestamp: new Date(), userAgent: 'test' };
+      await publisher.publishClickEvent(event);
+
+      expect(spy).toHaveBeenCalledWith('click-event', event, {
+        jobId: 'evt-123',
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 1000 },
+        removeOnComplete: true,
+        removeOnFail: 100,
+      });
+
+      spy.mockRestore();
     });
   });
 });

@@ -71,8 +71,8 @@ function ErrorState({ message, onRetry, onBack }) {
       <h3 className="text-[#F5F7FA] text-lg font-semibold mb-1">Unable to load link data</h3>
       <p className="text-[#707A8A] text-sm mb-6">{message}</p>
       <div className="flex items-center justify-center gap-3">
-        <button onClick={onBack} className="h-9 px-4 rounded-[6px] bg-[#1B202B] border border-[#2A313D] text-[13px] font-medium text-[#A8B0BD] hover:text-[#F5F7FA] transition-colors">Back to Links</button>
-        <button onClick={onRetry} className="h-9 px-4 rounded-[6px] bg-[#F2B95F] text-[#0E1117] text-[13px] font-semibold hover:bg-[#E4A744] transition-colors">Try Again</button>
+        <button onClick={onBack} className="h-9 px-4 rounded-[6px] bg-[#1B202B] border border-[#2A313D] text-[13px] font-medium text-[#A8B0BD] hover:text-[#F5F7FA] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F2B95F] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0E1117]">Back to Links</button>
+        <button onClick={onRetry} className="h-9 px-4 rounded-[6px] bg-[#F2B95F] text-[#0E1117] text-[13px] font-semibold hover:bg-[#E4A744] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F2B95F] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0E1117]">Try Again</button>
       </div>
     </div>
   );
@@ -88,7 +88,7 @@ function NotFoundState({ onBack }) {
       </div>
       <h3 className="text-[#F5F7FA] text-lg font-semibold mb-1">Link not found</h3>
       <p className="text-[#707A8A] text-sm mb-6">This link doesn't exist or may have been deleted.</p>
-      <button onClick={onBack} className="h-9 px-5 rounded-[6px] bg-[#F2B95F] text-[#0E1117] text-[13px] font-semibold hover:bg-[#E4A744] transition-colors">Back to Links</button>
+      <button onClick={onBack} className="h-9 px-5 rounded-[6px] bg-[#F2B95F] text-[#0E1117] text-[13px] font-semibold hover:bg-[#E4A744] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F2B95F] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0E1117]">Back to Links</button>
     </div>
   );
 }
@@ -239,6 +239,20 @@ export default function LinkDetailsPage() {
     window.open(buildShortUrl(link.shortCode), '_blank', 'noopener,noreferrer');
   }, [link]);
 
+  const closeDeleteModal = useCallback(() => {
+    if (!isDeleting) setShowDeleteModal(false);
+  }, [isDeleting]);
+
+  // Close delete modal on Escape key
+  useEffect(() => {
+    if (!showDeleteModal) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') closeDeleteModal();
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [showDeleteModal, closeDeleteModal]);
+
   const handleDeleteConfirm = useCallback(async () => {
     setIsDeleting(true);
     try {
@@ -247,7 +261,7 @@ export default function LinkDetailsPage() {
         state: { successNotification: { shortUrl: buildShortUrl(link?.shortCode || ''), title: link?.title || 'Untitled Link' } },
       });
     } catch (err) {
-      setNotification({ type: 'error', message: err.response?.data?.error?.message || 'Failed to delete link' });
+      setNotification({ type: 'error', message: err.response?.data?.message || 'Failed to delete link' });
     } finally {
       setIsDeleting(false);
       setShowDeleteModal(false);
@@ -302,7 +316,7 @@ export default function LinkDetailsPage() {
             <path strokeLinecap="round" strokeLinejoin="round" d={notification.type === 'success' ? 'M20 6L9 17l-5-5' : 'M12 9v2m0 4h.01'} />
           </svg>
           <span className="flex-1">{notification.message}</span>
-          <button onClick={() => setNotification(null)} className="p-1 rounded hover:bg-white/5 transition-colors" aria-label="Dismiss">
+          <button onClick={() => setNotification(null)} className="p-1 rounded hover:bg-white/5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F2B95F]" aria-label="Dismiss">
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
         </div>
@@ -310,7 +324,7 @@ export default function LinkDetailsPage() {
 
       {/* 1. LINK IDENTITY */}
       <section>
-        <button onClick={() => navigate('/app/links')} className="group flex items-center gap-1.5 text-[12px] font-medium text-[#707A8A] hover:text-[#F2B95F] transition-colors mb-5">
+        <button onClick={() => navigate('/app/links')} className="group flex items-center gap-1.5 text-[12px] font-medium text-[#707A8A] hover:text-[#F2B95F] transition-colors mb-5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F2B95F] rounded-[4px]">
           <svg className="w-3.5 h-3.5 transition-transform group-hover:-translate-x-0.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
           Your links
         </button>
@@ -323,19 +337,19 @@ export default function LinkDetailsPage() {
         </div>
         <a href={link.originalUrl} target="_blank" rel="noopener noreferrer" className="text-[13px] text-[#707A8A] hover:text-[#A8B0BD] transition-colors truncate block max-w-[640px] font-mono" title={link.originalUrl}>{link.originalUrl}</a>
         <div className="flex items-center gap-2 mt-5 flex-wrap">
-          <button onClick={handleCopy} className="h-9 px-4 inline-flex items-center gap-2 rounded-[6px] bg-[#F2B95F] text-[#0E1117] text-[13px] font-semibold hover:bg-[#E4A744] transition-colors">
+          <button onClick={handleCopy} className="h-9 px-4 inline-flex items-center gap-2 rounded-[6px] bg-[#F2B95F] text-[#0E1117] text-[13px] font-semibold hover:bg-[#E4A744] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F2B95F] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0E1117]">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" /></svg>
             Copy
           </button>
-          <button onClick={handleOpen} className="h-9 px-4 inline-flex items-center gap-2 rounded-[6px] bg-[#1B202B] border border-[#2A313D] text-[13px] font-medium text-[#A8B0BD] hover:text-[#F5F7FA] hover:border-[#3A414D] transition-colors">
+          <button onClick={handleOpen} className="h-9 px-4 inline-flex items-center gap-2 rounded-[6px] bg-[#1B202B] border border-[#2A313D] text-[13px] font-medium text-[#A8B0BD] hover:text-[#F5F7FA] hover:border-[#3A414D] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F2B95F] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0E1117]">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" /><polyline points="15 3 21 3 21 9" /><line x1="10" y1="14" x2="21" y2="3" /></svg>
             Open
           </button>
-          <button onClick={() => navigate(`/app/links/${id}/edit`)} className="h-9 px-4 inline-flex items-center gap-2 rounded-[6px] bg-[#1B202B] border border-[#2A313D] text-[13px] font-medium text-[#A8B0BD] hover:text-[#F5F7FA] hover:border-[#3A414D] transition-colors">
+          <button onClick={() => navigate(`/app/links/${id}/edit`)} className="h-9 px-4 inline-flex items-center gap-2 rounded-[6px] bg-[#1B202B] border border-[#2A313D] text-[13px] font-medium text-[#A8B0BD] hover:text-[#F5F7FA] hover:border-[#3A414D] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F2B95F] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0E1117]">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" strokeLinecap="round" strokeLinejoin="round" /><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" strokeLinecap="round" strokeLinejoin="round" /></svg>
             Edit
           </button>
-          <button onClick={() => setShowDeleteModal(true)} className="h-9 px-4 inline-flex items-center gap-2 rounded-[6px] bg-[#F06B7A]/10 border border-[#F06B7A]/20 text-[13px] font-medium text-[#F06B7A] hover:bg-[#F06B7A]/20 transition-colors">
+          <button onClick={() => setShowDeleteModal(true)} className="h-9 px-4 inline-flex items-center gap-2 rounded-[6px] bg-[#F06B7A]/10 border border-[#F06B7A]/20 text-[13px] font-medium text-[#F06B7A] hover:bg-[#F06B7A]/20 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F06B7A] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0E1117]">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6" strokeLinecap="round" strokeLinejoin="round" /><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" strokeLinecap="round" strokeLinejoin="round" /></svg>
             Delete
           </button>
@@ -353,7 +367,7 @@ export default function LinkDetailsPage() {
           </div>
           <div className="flex items-center gap-1.5">
             {DATE_RANGE_OPTIONS.map(opt => (
-              <button key={opt.value} onClick={() => handleRangeChange(opt.value)} className={`h-8 px-3 rounded-[6px] text-[11px] font-semibold tracking-wide uppercase transition-colors ${selectedRange === opt.value ? 'bg-[#F2B95F] text-[#0E1117]' : 'bg-[#1B202B] border border-[#2A313D] text-[#707A8A] hover:text-[#F5F7FA] hover:border-[#3A414D]'}`}>{opt.label}</button>
+              <button key={opt.value} onClick={() => handleRangeChange(opt.value)} className={`h-8 px-3 rounded-[6px] text-[11px] font-semibold tracking-wide uppercase transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F2B95F] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0E1117] ${selectedRange === opt.value ? 'bg-[#F2B95F] text-[#0E1117]' : 'bg-[#1B202B] border border-[#2A313D] text-[#707A8A] hover:text-[#F5F7FA] hover:border-[#3A414D]'}`}>{opt.label}</button>
             ))}
           </div>
         </div>
@@ -499,15 +513,15 @@ export default function LinkDetailsPage() {
 
       {/* DELETE MODAL */}
       {showDeleteModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#0E1117]/80 backdrop-blur-sm" onClick={() => !isDeleting && setShowDeleteModal(false)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#0E1117]/80 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="ld-delete-title" aria-describedby="ld-delete-desc" onClick={closeDeleteModal}>
           <div className="w-full max-w-md bg-[#151922] border border-[#2A313D] rounded-[10px] overflow-hidden" onClick={e => e.stopPropagation()}>
-            <div className="px-6 py-5 border-b border-[#2A313D]"><h2 className="text-[#F5F7FA] text-lg font-semibold">Delete link</h2></div>
+            <div className="px-6 py-5 border-b border-[#2A313D]"><h2 id="ld-delete-title" className="text-[#F5F7FA] text-lg font-semibold">Delete link</h2></div>
             <div className="px-6 py-5">
-              <p className="text-[#A8B0BD] text-[13px] leading-relaxed">Are you sure you want to delete <code className="text-[#F2B95F] font-mono bg-[#1B202B] px-1.5 py-0.5 rounded-[4px] border border-[#2A313D]">{shortUrl}</code>? This action cannot be undone.</p>
+              <p id="ld-delete-desc" className="text-[#A8B0BD] text-[13px] leading-relaxed">Are you sure you want to delete <code className="text-[#F2B95F] font-mono bg-[#1B202B] px-1.5 py-0.5 rounded-[4px] border border-[#2A313D]">{shortUrl}</code>? This action cannot be undone.</p>
             </div>
             <div className="px-6 py-4 border-t border-[#2A313D] bg-[#1B202B]/40 flex justify-end gap-3">
-              <button onClick={() => setShowDeleteModal(false)} disabled={isDeleting} className="h-10 px-4 rounded-[6px] bg-[#1B202B] border border-[#2A313D] text-[13px] font-medium text-[#A8B0BD] hover:text-[#F5F7FA] transition-colors disabled:opacity-50">Cancel</button>
-              <button onClick={handleDeleteConfirm} disabled={isDeleting} className="h-10 px-4 inline-flex items-center gap-2 rounded-[6px] bg-[#F06B7A] text-[#0E1117] text-[13px] font-semibold hover:bg-[#F06B7A]/90 transition-colors disabled:opacity-50">
+              <button onClick={() => setShowDeleteModal(false)} disabled={isDeleting} className="h-10 px-4 rounded-[6px] bg-[#1B202B] border border-[#2A313D] text-[13px] font-medium text-[#A8B0BD] hover:text-[#F5F7FA] transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F2B95F] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0E1117]">Cancel</button>
+              <button onClick={handleDeleteConfirm} disabled={isDeleting} className="h-10 px-4 inline-flex items-center gap-2 rounded-[6px] bg-[#F06B7A] text-[#0E1117] text-[13px] font-semibold hover:bg-[#F06B7A]/90 transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F06B7A] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0E1117]">
                 {isDeleting && <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2.5" strokeOpacity="0.25" /><path d="M12 2a10 10 0 0110 10" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" /></svg>}
                 {isDeleting ? 'Deleting...' : 'Delete'}
               </button>

@@ -86,7 +86,7 @@ export default function RegisterPage() {
       navigate('/app', { replace: true });
     } catch (err) {
       const status = err.response?.status;
-      const message = err.response?.data?.error?.message || err.response?.data?.message || err.message;
+      const message = err.response?.data?.message || err.response?.data?.error?.message || err.message;
 
       if (status === 409) {
         setServerError('An account with this email already exists.');

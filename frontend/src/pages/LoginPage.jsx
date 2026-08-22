@@ -59,7 +59,7 @@ export default function LoginPage() {
       navigate(from, { replace: true });
     } catch (err) {
       const status = err.response?.status;
-      const message = err.response?.data?.error?.message || err.response?.data?.message || err.message;
+      const message = err.response?.data?.message || err.response?.data?.error?.message || err.message;
 
       if (status === 401) {
         setServerError('Invalid email or password.');
