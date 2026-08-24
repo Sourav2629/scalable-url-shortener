@@ -10,7 +10,6 @@ export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
   const [errors, setErrors] = useState({});
   const [serverError, setServerError] = useState('');
-  const [successMessage, setSuccessMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
   const validate = () => {
@@ -26,7 +25,6 @@ export default function ForgotPasswordPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setServerError('');
-    setSuccessMessage('');
 
     const validationErrors = validate();
     if (Object.keys(validationErrors).length > 0) {
@@ -41,18 +39,9 @@ export default function ForgotPasswordPage() {
       const normalizedEmail = email.trim().toLowerCase();
       await authService.forgotPassword({ email: normalizedEmail });
 
-      // Store email for the reset page
+      // Store email for the reset page and navigate directly
       sessionStorage.setItem(SESSION_STORAGE_KEY, normalizedEmail);
-
-      setSuccessMessage('A password reset code has been sent to your email.');
-
-      // Navigate to reset page after brief delay
-      setTimeout(() => {
-        navigate('/reset-password', {
-          replace: true,
-          state: { email: normalizedEmail },
-        });
-      }, 1200);
+      navigate('/reset-password', { state: { email: normalizedEmail } });
     } catch (err) {
       const status = err.response?.status;
       const message = err.response?.data?.message || err.message;
@@ -110,20 +99,6 @@ export default function ForgotPasswordPage() {
             </div>
           )}
 
-          {/* Success message */}
-          {successMessage && (
-            <div
-              className="mb-5 p-3 border border-[#50CFA6]/30 bg-[#50CFA6]/10 rounded-[8px] text-sm text-[#50CFA6] flex items-center gap-2"
-              role="status"
-              aria-live="polite"
-            >
-              <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-                <path fillRule="evenodd" d="M8 16A8 8 0 108 0a8 8 0 000 16zm3.78-9.72a.75.75 0 00-1.06-1.06L7 8.94 5.28 7.22a.75.75 0 00-1.06 1.06l2.25 2.25a.75.75 0 001.06 0l4.25-4.25z" clipRule="evenodd" />
-              </svg>
-              <span>{successMessage}</span>
-            </div>
-          )}
-
           {/* Info text */}
           <div className="mb-6">
             <p className="text-[14px] text-[#A8B0BD] leading-[1.6]">
@@ -132,7 +107,6 @@ export default function ForgotPasswordPage() {
           </div>
 
           <form onSubmit={handleSubmit} noValidate className="space-y-5">
-            {/* Email */}
             <div>
               <div className="flex items-center justify-between mb-2">
                 <label htmlFor="forgot-email" className="block text-[11px] font-semibold tracking-[0.14em] uppercase text-[#A8B0BD]">
@@ -168,7 +142,6 @@ export default function ForgotPasswordPage() {
               )}
             </div>
 
-            {/* Submit */}
             <button
               type="submit"
               disabled={isLoading}

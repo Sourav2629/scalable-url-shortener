@@ -13,6 +13,7 @@ import LinkDetailsPage from './pages/LinkDetailsPage';
 import VerifyEmailPage from './pages/VerifyEmailPage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
+import ProfilePage from './pages/ProfilePage';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 
 export default function App() {
@@ -48,6 +49,7 @@ export default function App() {
             <Route path="links/new" element={<CreateLinkPage />} />
             <Route path="links/:id/edit" element={<CreateLinkPage />} />
             <Route path="links/:id" element={<LinkDetailsPage />} />
+            <Route path="profile" element={<ProfilePage />} />
           </Route>
         </Routes>
       </AuthProvider>

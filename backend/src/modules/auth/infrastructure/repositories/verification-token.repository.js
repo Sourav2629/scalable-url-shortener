@@ -59,6 +59,10 @@ class VerificationTokenRepository {
       { new: true },
     );
   }
+
+  async deleteByUser(userId) {
+    return VerificationToken.deleteMany({ userId });
+  }
 }
 
 module.exports = VerificationTokenRepository;

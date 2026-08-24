@@ -25,6 +25,10 @@ const userSchema = new mongoose.Schema(
       default: null,
       select: false,
     },
+    passwordChangedAt: {
+      type: Date,
+      default: null,
+    },
     isEmailVerified: {
       type: Boolean,
       default: false,

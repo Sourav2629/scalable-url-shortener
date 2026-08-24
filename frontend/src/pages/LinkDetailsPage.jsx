@@ -31,10 +31,11 @@ function pct(part, total) {
   return Math.round((part / total) * 100);
 }
 
-function StatusBadge({ isActive }) {
-  return isActive
-    ? <span className="inline-flex items-center px-2 py-0.5 rounded-[4px] text-[10px] font-mono font-medium tracking-[0.1em] uppercase bg-[#50CFA6]/15 text-[#50CFA6]">Active</span>
-    : <span className="inline-flex items-center px-2 py-0.5 rounded-[4px] text-[10px] font-mono font-medium tracking-[0.1em] uppercase bg-[#F06B7A]/15 text-[#F06B7A]">Inactive</span>;
+function StatusBadge({ isActive, isExpired }) {
+  if (!isActive || isExpired) {
+    return <span className="inline-flex items-center px-2 py-0.5 rounded-[4px] text-[10px] font-mono font-medium tracking-[0.1em] uppercase bg-[#F06B7A]/15 text-[#F06B7A]">Inactive</span>;
+  }
+  return <span className="inline-flex items-center px-2 py-0.5 rounded-[4px] text-[10px] font-mono font-medium tracking-[0.1em] uppercase bg-[#50CFA6]/15 text-[#50CFA6]">Active</span>;
 }
 
 function LoadingSkeleton() {
@@ -333,7 +334,7 @@ export default function LinkDetailsPage() {
         </div>
         <div className="flex items-center gap-3 flex-wrap mb-2">
           <code className="font-mono text-[15px] text-[#F2B95F] bg-[#1B202B] px-3 py-1.5 rounded-[6px] border border-[#2A313D]">{shortUrl}</code>
-          <StatusBadge isActive={link.isActive} />
+          <StatusBadge isActive={link.isActive} isExpired={link.isExpired} />
         </div>
         <a href={link.originalUrl} target="_blank" rel="noopener noreferrer" className="text-[13px] text-[#707A8A] hover:text-[#A8B0BD] transition-colors truncate block max-w-[640px] font-mono" title={link.originalUrl}>{link.originalUrl}</a>
         <div className="flex items-center gap-2 mt-5 flex-wrap">
@@ -500,7 +501,7 @@ export default function LinkDetailsPage() {
               { label: 'Created', value: format(new Date(link.createdAt), 'MMM d, yyyy') },
               { label: 'Updated', value: format(new Date(link.updatedAt), 'MMM d, yyyy') },
               link.expiresAt && { label: 'Expires', value: format(new Date(link.expiresAt), 'MMM d, yyyy') },
-              { label: 'Status', value: link.isActive ? 'Active' : 'Inactive' },
+              { label: 'Status', value: (!link.isActive || link.isExpired) ? 'Inactive' : 'Active' },
             ].filter(Boolean).map(({ label, value, mono }) => (
               <div key={label}>
                 <p className="text-[10px] font-mono font-semibold tracking-[0.12em] uppercase text-[#707A8A] mb-1">{label}</p>

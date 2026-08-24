@@ -84,6 +84,16 @@ describe('URL Service & Public Redirect Logic', () => {
       );
     });
 
+    test('getUrlByShortCode returns 404 when expiresAt equals current time', async () => {
+      const now = new Date();
+      mockUrlRepo.findByShortCode.mockResolvedValue({
+        isDeleted: false, isActive: true, expiresAt: now,
+      });
+      await expect(urlService.getUrlByShortCode('boundary1')).rejects.toThrow(
+        expect.objectContaining({ statusCode: 404 })
+      );
+    });
+
     test('getUrlByShortCode does NOT increment click count for inactive URL', async () => {
       mockUrlRepo.findByShortCode.mockResolvedValue({ isDeleted: false, isActive: false });
       await expect(urlService.getUrlByShortCode('inactive1')).rejects.toThrow();
@@ -608,6 +618,98 @@ describe('URL Service & Public Redirect Logic', () => {
         expect(result.urls).toHaveLength(0);
         expect(result.total).toBe(0);
         expect(result.totalPages).toBe(0);
+      });
+    });
+
+    describe('isExpired — expiration status derivation', () => {
+      test('active link with no expiration returns isExpired: false', async () => {
+        mockUrlRepo.findByIdForOwner.mockResolvedValue({
+          _id: 'url1', owner: 'user1', originalUrl: 'https://example.com',
+          shortCode: 'abc', clickCount: 0, isActive: true, isDeleted: false,
+          expiresAt: null, createdAt: new Date(), updatedAt: new Date(),
+        });
+
+        const result = await urlService.getUrlById('user1', 'url1');
+        expect(result.isExpired).toBe(false);
+        expect(result.isActive).toBe(true);
+      });
+
+      test('active link with future expiration returns isExpired: false', async () => {
+        mockUrlRepo.findByIdForOwner.mockResolvedValue({
+          _id: 'url1', owner: 'user1', originalUrl: 'https://example.com',
+          shortCode: 'abc', clickCount: 0, isActive: true, isDeleted: false,
+          expiresAt: new Date(Date.now() + 86400000),
+          createdAt: new Date(), updatedAt: new Date(),
+        });
+
+        const result = await urlService.getUrlById('user1', 'url1');
+        expect(result.isExpired).toBe(false);
+        expect(result.isActive).toBe(true);
+      });
+
+      test('active link with past expiration returns isExpired: true', async () => {
+        mockUrlRepo.findByIdForOwner.mockResolvedValue({
+          _id: 'url1', owner: 'user1', originalUrl: 'https://example.com',
+          shortCode: 'abc', clickCount: 0, isActive: true, isDeleted: false,
+          expiresAt: new Date(Date.now() - 86400000),
+          createdAt: new Date(), updatedAt: new Date(),
+        });
+
+        const result = await urlService.getUrlById('user1', 'url1');
+        expect(result.isExpired).toBe(true);
+        expect(result.isActive).toBe(true);
+      });
+
+      test('expiration exactly at current time returns isExpired: true', async () => {
+        const now = new Date();
+        mockUrlRepo.findByIdForOwner.mockResolvedValue({
+          _id: 'url1', owner: 'user1', originalUrl: 'https://example.com',
+          shortCode: 'abc', clickCount: 0, isActive: true, isDeleted: false,
+          expiresAt: now,
+          createdAt: new Date(), updatedAt: new Date(),
+        });
+
+        const result = await urlService.getUrlById('user1', 'url1');
+        expect(result.isExpired).toBe(true);
+      });
+
+      test('manually inactive link still returns isActive: false', async () => {
+        mockUrlRepo.findByIdForOwner.mockResolvedValue({
+          _id: 'url1', owner: 'user1', originalUrl: 'https://example.com',
+          shortCode: 'abc', clickCount: 0, isActive: false, isDeleted: false,
+          expiresAt: null, createdAt: new Date(), updatedAt: new Date(),
+        });
+
+        const result = await urlService.getUrlById('user1', 'url1');
+        expect(result.isActive).toBe(false);
+        expect(result.isExpired).toBe(false);
+      });
+
+      test('expired link does not modify the stored isActive field', async () => {
+        mockUrlRepo.findByIdForOwner.mockResolvedValue({
+          _id: 'url1', owner: 'user1', originalUrl: 'https://example.com',
+          shortCode: 'abc', clickCount: 0, isActive: true, isDeleted: false,
+          expiresAt: new Date(Date.now() - 86400000),
+          createdAt: new Date(), updatedAt: new Date(),
+        });
+
+        const result = await urlService.getUrlById('user1', 'url1');
+        expect(result.isActive).toBe(true);
+        expect(result.isExpired).toBe(true);
+      });
+
+      test('getUserUrls returns isExpired for each URL', async () => {
+        mockUrlRepo.findByOwner.mockResolvedValue({
+          urls: [
+            { _id: 'url1', owner: 'user1', shortCode: 'active', originalUrl: 'https://a.com', clickCount: 0, isActive: true, isDeleted: false, expiresAt: null, createdAt: new Date(), updatedAt: new Date() },
+            { _id: 'url2', owner: 'user1', shortCode: 'expired', originalUrl: 'https://b.com', clickCount: 0, isActive: true, isDeleted: false, expiresAt: new Date(Date.now() - 86400000), createdAt: new Date(), updatedAt: new Date() },
+          ],
+          total: 2,
+        });
+
+        const result = await urlService.getUserUrls('user1', {});
+        expect(result.urls[0].isExpired).toBe(false);
+        expect(result.urls[1].isExpired).toBe(true);
       });
     });
   });

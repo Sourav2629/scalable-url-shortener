@@ -132,13 +132,14 @@ export default function LinksPage() {
     }
   };
 
-  const getStatusBadge = (isActive, isDeleted) => {
+  const getStatusBadge = (isActive, isDeleted, isExpired) => {
     if (isDeleted) {
       return <span className="inline-flex items-center px-2 py-0.5 rounded-[4px] text-[10px] font-mono font-medium tracking-[0.1em] uppercase bg-[#2A313D] text-[#707A8A]">Deleted</span>;
     }
-    return isActive
-      ? <span className="inline-flex items-center px-2 py-0.5 rounded-[4px] text-[10px] font-mono font-medium tracking-[0.1em] uppercase bg-[#50CFA6]/15 text-[#50CFA6]">Active</span>
-      : <span className="inline-flex items-center px-2 py-0.5 rounded-[4px] text-[10px] font-mono font-medium tracking-[0.1em] uppercase bg-[#F06A7A]/15 text-[#F06A7A]">Inactive</span>;
+    if (!isActive || isExpired) {
+      return <span className="inline-flex items-center px-2 py-0.5 rounded-[4px] text-[10px] font-mono font-medium tracking-[0.1em] uppercase bg-[#F06A7A]/15 text-[#F06A7A]">Inactive</span>;
+    }
+    return <span className="inline-flex items-center px-2 py-0.5 rounded-[4px] text-[10px] font-mono font-medium tracking-[0.1em] uppercase bg-[#50CFA6]/15 text-[#50CFA6]">Active</span>;
   };
 
   const columns = [
@@ -441,7 +442,7 @@ export default function LinksPage() {
                         <span className="text-[13px] font-mono text-[#F5F7FA] tabular-nums">{link.clickCount || 0}</span>
                       </td>
                       <td className="px-4 py-3">
-                        {getStatusBadge(link.isActive, link.isDeleted)}
+                        {getStatusBadge(link.isActive, link.isDeleted, link.isExpired)}
                       </td>
                       <td className="px-4 py-3">
                         <span className="text-[12px] text-[#707A8A] font-mono whitespace-nowrap">
@@ -545,7 +546,7 @@ export default function LinksPage() {
                         <p className="text-[13px] text-[#F5F7FA] mb-2">{link.title}</p>
                       )}
                     </div>
-                    {getStatusBadge(link.isActive, link.isDeleted)}
+                    {getStatusBadge(link.isActive, link.isDeleted, link.isExpired)}
                   </div>
 
                   <div className="flex flex-wrap items-center gap-4 text-[11px] font-mono text-[#707A8A] mb-3">

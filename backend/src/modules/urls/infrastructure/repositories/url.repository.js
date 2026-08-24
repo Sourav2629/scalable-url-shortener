@@ -70,6 +70,14 @@ class UrlRepository {
   async incrementClickCount(id) {
     return Url.findByIdAndUpdate(id, { $inc: { clickCount: 1 } });
   }
+
+  async hardDeleteByOwner(ownerId) {
+    return Url.deleteMany({ owner: ownerId });
+  }
+
+  async findIdsByOwner(ownerId) {
+    return Url.find({ owner: ownerId }, { _id: 1 }).lean();
+  }
 }
 
 module.exports = UrlRepository;

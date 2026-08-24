@@ -37,6 +37,14 @@ class AnalyticsRepository {
       { $sort: { _id: 1 } },
     ]);
   }
+
+  async deleteByUser(userId) {
+    return AnalyticsEvent.deleteMany({ userId });
+  }
+
+  async deleteByUrls(urlIds) {
+    return AnalyticsEvent.deleteMany({ urlId: { $in: urlIds } });
+  }
 }
 
 module.exports = { analyticsRepository: new AnalyticsRepository() };

@@ -46,6 +46,21 @@ function createAuthController(authService) {
 
       res.status(200).json(result);
     },
+    updateProfile: async (req, res) => {
+      const user = await authService.updateProfile(req.auth.userId, req.body);
+
+      res.status(200).json({ user });
+    },
+    changePassword: async (req, res) => {
+      const result = await authService.changePassword(req.auth.userId, req.body);
+
+      res.status(200).json(result);
+    },
+    deleteAccount: async (req, res) => {
+      const result = await authService.deleteAccount(req.auth.userId, req.body);
+
+      res.status(200).json(result);
+    },
   };
 }
 

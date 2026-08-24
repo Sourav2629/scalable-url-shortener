@@ -184,24 +184,26 @@ describe('AuthService — forgotPassword', () => {
     expect(mockEmailService.sendPasswordResetEmail).toHaveBeenCalledTimes(1);
   });
 
-  test('returns same generic message for non-existent email', async () => {
+  test('throws 404 for non-existent email', async () => {
     mockUserRepo.findByEmail.mockResolvedValue(null);
 
-    const result = await authService.forgotPassword({ email: 'unknown@example.com' });
+    await expect(
+      authService.forgotPassword({ email: 'unknown@example.com' })
+    ).rejects.toThrow(expect.objectContaining({ statusCode: 404 }));
 
-    expect(result.message).toBe('If this email is registered, a password reset code has been sent.');
     expect(mockVerificationTokenRepo.invalidateAll).not.toHaveBeenCalled();
     expect(mockVerificationTokenRepo.create).not.toHaveBeenCalled();
     expect(mockEmailService.sendPasswordResetEmail).not.toHaveBeenCalled();
   });
 
-  test('returns same generic message for unverified user', async () => {
+  test('throws 403 for unverified user', async () => {
     const user = createMockUser({ isEmailVerified: false });
     mockUserRepo.findByEmail.mockResolvedValue(user);
 
-    const result = await authService.forgotPassword({ email: 'test@example.com' });
+    await expect(
+      authService.forgotPassword({ email: 'test@example.com' })
+    ).rejects.toThrow(expect.objectContaining({ statusCode: 403 }));
 
-    expect(result.message).toBe('If this email is registered, a password reset code has been sent.');
     expect(mockVerificationTokenRepo.invalidateAll).not.toHaveBeenCalled();
     expect(mockVerificationTokenRepo.create).not.toHaveBeenCalled();
     expect(mockEmailService.sendPasswordResetEmail).not.toHaveBeenCalled();
@@ -506,23 +508,25 @@ describe('AuthService — resendPasswordReset', () => {
     expect(mockEmailService.sendPasswordResetEmail).toHaveBeenCalledTimes(1);
   });
 
-  test('returns generic message for non-existent email', async () => {
+  test('throws 404 for non-existent email', async () => {
     mockUserRepo.findByEmail.mockResolvedValue(null);
 
-    const result = await authService.resendPasswordReset({ email: 'unknown@example.com' });
+    await expect(
+      authService.resendPasswordReset({ email: 'unknown@example.com' })
+    ).rejects.toThrow(expect.objectContaining({ statusCode: 404 }));
 
-    expect(result.message).toBe('If this email is registered, a new password reset code has been sent.');
     expect(mockVerificationTokenRepo.invalidateAll).not.toHaveBeenCalled();
     expect(mockVerificationTokenRepo.create).not.toHaveBeenCalled();
   });
 
-  test('returns generic message for unverified user', async () => {
+  test('throws 403 for unverified user', async () => {
     const user = createMockUser({ isEmailVerified: false });
     mockUserRepo.findByEmail.mockResolvedValue(user);
 
-    const result = await authService.resendPasswordReset({ email: 'test@example.com' });
+    await expect(
+      authService.resendPasswordReset({ email: 'test@example.com' })
+    ).rejects.toThrow(expect.objectContaining({ statusCode: 403 }));
 
-    expect(result.message).toBe('If this email is registered, a new password reset code has been sent.');
     expect(mockVerificationTokenRepo.invalidateAll).not.toHaveBeenCalled();
     expect(mockVerificationTokenRepo.create).not.toHaveBeenCalled();
   });
@@ -689,5 +693,121 @@ describe('Password Reset Integration', () => {
     });
 
     expect(mockUserRepo.clearRefreshToken).toHaveBeenCalledWith(user._id);
+  });
+});
+
+// ─── Deleted Account Regression Tests ──────────────────────────────
+
+describe('Deleted Account — Forgot Password Security', () => {
+  let authService;
+  let mockUserRepo;
+  let mockTokenService;
+  let mockEmailService;
+  let mockVerificationTokenRepo;
+
+  beforeEach(() => {
+    mockUserRepo = {
+      findByEmail: jest.fn(),
+      findByEmailWithPassword: jest.fn(),
+      updatePassword: jest.fn(),
+      clearRefreshToken: jest.fn().mockResolvedValue({}),
+    };
+    mockTokenService = {};
+    mockEmailService = {
+      sendPasswordResetEmail: jest.fn().mockResolvedValue(undefined),
+    };
+    mockVerificationTokenRepo = {
+      findActive: jest.fn(),
+      incrementAttempts: jest.fn(),
+      markUsed: jest.fn().mockResolvedValue({}),
+      invalidateAll: jest.fn().mockResolvedValue({}),
+      create: jest.fn().mockResolvedValue({}),
+    };
+
+    authService = new AuthService(mockUserRepo, mockTokenService, mockEmailService, mockVerificationTokenRepo, null);
+  });
+
+  test('forgotPassword does NOT send OTP for deleted user (user not found)', async () => {
+    // User was permanently deleted — findByEmail returns null
+    mockUserRepo.findByEmail.mockResolvedValue(null);
+
+    await expect(
+      authService.forgotPassword({ email: 'deleted@example.com' })
+    ).rejects.toThrow(expect.objectContaining({ statusCode: 404 }));
+
+    expect(mockVerificationTokenRepo.invalidateAll).not.toHaveBeenCalled();
+    expect(mockVerificationTokenRepo.create).not.toHaveBeenCalled();
+    expect(mockEmailService.sendPasswordResetEmail).not.toHaveBeenCalled();
+  });
+
+  test('forgotPassword does NOT send OTP for unverified user', async () => {
+    const user = createMockUser({ isEmailVerified: false });
+    mockUserRepo.findByEmail.mockResolvedValue(user);
+
+    await expect(
+      authService.forgotPassword({ email: 'test@example.com' })
+    ).rejects.toThrow(expect.objectContaining({ statusCode: 403 }));
+
+    expect(mockVerificationTokenRepo.invalidateAll).not.toHaveBeenCalled();
+    expect(mockVerificationTokenRepo.create).not.toHaveBeenCalled();
+    expect(mockEmailService.sendPasswordResetEmail).not.toHaveBeenCalled();
+  });
+
+  test('forgotPassword sends OTP for existing verified user', async () => {
+    const user = createMockUser({ isEmailVerified: true });
+    mockUserRepo.findByEmail.mockResolvedValue(user);
+
+    await authService.forgotPassword({ email: 'test@example.com' });
+
+    expect(mockVerificationTokenRepo.invalidateAll).toHaveBeenCalled();
+    expect(mockVerificationTokenRepo.create).toHaveBeenCalledTimes(1);
+    expect(mockEmailService.sendPasswordResetEmail).toHaveBeenCalledTimes(1);
+  });
+
+  test('resendPasswordReset does NOT send OTP for deleted user', async () => {
+    mockUserRepo.findByEmail.mockResolvedValue(null);
+
+    await expect(
+      authService.resendPasswordReset({ email: 'deleted@example.com' })
+    ).rejects.toThrow(expect.objectContaining({ statusCode: 404 }));
+
+    expect(mockVerificationTokenRepo.invalidateAll).not.toHaveBeenCalled();
+    expect(mockVerificationTokenRepo.create).not.toHaveBeenCalled();
+    expect(mockEmailService.sendPasswordResetEmail).not.toHaveBeenCalled();
+  });
+
+  test('resetPassword does NOT work for deleted user', async () => {
+    mockUserRepo.findByEmail.mockResolvedValue(null);
+
+    await expect(
+      authService.resetPassword({
+        email: 'deleted@example.com',
+        code: '123456',
+        newPassword: 'newpassword123',
+      })
+    ).rejects.toThrow('Invalid or expired reset code. Please request a new one.');
+
+    expect(mockUserRepo.updatePassword).not.toHaveBeenCalled();
+  });
+
+  test('new registration after deletion works for forgot-password', async () => {
+    // Simulate: user was deleted, new user registered with same email
+    const newVerifiedUser = createMockUser({
+      id: 'new-user-id',
+      email: 'recycled@example.com',
+      isEmailVerified: true,
+    });
+
+    mockUserRepo.findByEmail.mockResolvedValue(newVerifiedUser);
+
+    const result = await authService.forgotPassword({ email: 'recycled@example.com' });
+
+    expect(result.message).toBe('If this email is registered, a password reset code has been sent.');
+    expect(mockVerificationTokenRepo.invalidateAll).toHaveBeenCalledWith({
+      userId: newVerifiedUser._id,
+      purpose: 'password_reset',
+    });
+    expect(mockVerificationTokenRepo.create).toHaveBeenCalledTimes(1);
+    expect(mockEmailService.sendPasswordResetEmail).toHaveBeenCalledTimes(1);
   });
 });

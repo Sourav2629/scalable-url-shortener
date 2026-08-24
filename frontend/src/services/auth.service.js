@@ -43,3 +43,18 @@ export async function resendPasswordReset({ email }) {
   const { data } = await api.post('/api/v1/auth/resend-password-reset', { email });
   return data;
 }
+
+export async function updateProfile({ name }) {
+  const { data } = await api.patch('/api/v1/auth/profile', { name });
+  return data;
+}
+
+export async function changePassword({ currentPassword, newPassword }) {
+  const { data } = await api.post('/api/v1/auth/change-password', { currentPassword, newPassword });
+  return data;
+}
+
+export async function deleteAccount({ password }) {
+  const { data } = await api.delete('/api/v1/auth/account', { data: { password } });
+  return data;
+}

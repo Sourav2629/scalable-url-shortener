@@ -14,6 +14,7 @@ function serializeUser(user) {
     name: user.name,
     email: user.email,
     isEmailVerified: user.isEmailVerified,
+    passwordChangedAt: user.passwordChangedAt || null,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
   };
@@ -34,12 +35,14 @@ function getPendingRegistrationExpiryDate() {
 }
 
 class AuthService {
-  constructor(userRepository, tokenService, emailService, verificationTokenRepository, pendingRegistrationRepository) {
+  constructor(userRepository, tokenService, emailService, verificationTokenRepository, pendingRegistrationRepository, urlRepository, analyticsRepository) {
     this.userRepository = userRepository;
     this.tokenService = tokenService;
     this.emailService = emailService || null;
     this.verificationTokenRepository = verificationTokenRepository || null;
     this.pendingRegistrationRepository = pendingRegistrationRepository || null;
+    this.urlRepository = urlRepository || null;
+    this.analyticsRepository = analyticsRepository || null;
   }
 
   async register({ name, email, password }) {
@@ -374,12 +377,14 @@ class AuthService {
   async forgotPassword({ email }) {
     const user = await this.userRepository.findByEmail(email);
 
-    // If user does not exist or is not verified, return the same generic response.
-    // Never reveal whether the account exists or its verification status.
-    if (!user || !user.isEmailVerified) {
-      return {
-        message: 'If this email is registered, a password reset code has been sent.',
-      };
+    // If user does not exist, return a clear error.
+    if (!user) {
+      throw new AppError('No account found with this email address.', 404);
+    }
+
+    // If user exists but is not verified, return a clear error.
+    if (!user.isEmailVerified) {
+      throw new AppError('Please verify your email before resetting your password.', 403);
     }
 
     // Invalidate any existing password-reset tokens for this user
@@ -487,11 +492,14 @@ class AuthService {
   async resendPasswordReset({ email }) {
     const user = await this.userRepository.findByEmail(email);
 
-    // If user does not exist or is not verified, return same generic response
-    if (!user || !user.isEmailVerified) {
-      return {
-        message: 'If this email is registered, a new password reset code has been sent.',
-      };
+    // If user does not exist, return a clear error.
+    if (!user) {
+      throw new AppError('No account found with this email address.', 404);
+    }
+
+    // If user exists but is not verified, return a clear error.
+    if (!user.isEmailVerified) {
+      throw new AppError('Please verify your email before resetting your password.', 403);
     }
 
     // Invalidate previous password-reset tokens
@@ -541,6 +549,86 @@ class AuthService {
         refreshToken,
       },
     };
+  }
+
+  // ─── Profile Management ─────────────────────────────────────────
+
+  async updateProfile(userId, { name }) {
+    const user = await this.userRepository.updateById(userId, { name });
+
+    if (!user) {
+      throw new AppError('User not found.', 404);
+    }
+
+    return serializeUser(user);
+  }
+
+  async changePassword(userId, { currentPassword, newPassword }) {
+    const user = await this.userRepository.findByIdWithPassword(userId);
+
+    if (!user) {
+      throw new AppError('User not found.', 404);
+    }
+
+    const isCurrentPasswordValid = await bcrypt.compare(currentPassword, user.password);
+
+    if (!isCurrentPasswordValid) {
+      throw new AppError('Current password is incorrect.', 400);
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, PASSWORD_SALT_ROUNDS);
+    await this.userRepository.updatePassword(userId, passwordHash);
+
+    // Invalidate existing session/refresh token — user must re-login
+    await this.userRepository.clearRefreshToken(userId);
+
+    return { message: 'Password changed successfully. Please sign in again.' };
+  }
+
+  async deleteAccount(userId, { password }) {
+    const user = await this.userRepository.findByIdWithPassword(userId);
+
+    if (!user) {
+      throw new AppError('User not found.', 404);
+    }
+
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+
+    if (!isPasswordValid) {
+      throw new AppError('Password is incorrect.', 400);
+    }
+
+    // 1. Delete analytics events owned by this user
+    if (this.analyticsRepository) {
+      await this.analyticsRepository.deleteByUser(userId);
+    }
+
+    // 2. Find and delete analytics events for user's URLs, then hard-delete URLs
+    if (this.urlRepository) {
+      const urlIds = await this.urlRepository.findIdsByOwner(userId);
+
+      if (urlIds.length > 0 && this.analyticsRepository) {
+        const ids = urlIds.map((doc) => doc._id);
+        await this.analyticsRepository.deleteByUrls(ids);
+      }
+
+      await this.urlRepository.hardDeleteByOwner(userId);
+    }
+
+    // 3. Delete verification tokens
+    if (this.verificationTokenRepository) {
+      await this.verificationTokenRepository.deleteByUser(userId);
+    }
+
+    // 4. Delete pending registration if any
+    if (this.pendingRegistrationRepository) {
+      await this.pendingRegistrationRepository.deleteByEmail(user.email);
+    }
+
+    // 5. Hard-delete the user
+    await this.userRepository.deleteById(userId);
+
+    return { message: 'Account has been permanently deleted.' };
   }
 }
 

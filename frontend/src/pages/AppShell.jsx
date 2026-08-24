@@ -80,12 +80,19 @@ export default function AppShell() {
           <div className="flex items-center gap-4">
             {/* User indicator — desktop only */}
             <div className="hidden md:flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-full bg-[#1B202B] border border-[#2A313D] flex items-center justify-center text-xs font-bold text-[#F2B95F]">
-                {user?.name?.charAt(0)?.toUpperCase() || user?.email?.charAt(0)?.toUpperCase() || 'U'}
-              </div>
-              <span className="text-sm text-[#A8B0BD] font-medium max-w-[160px] truncate">
-                {user?.name || user?.email || 'User'}
-              </span>
+              <button
+                type="button"
+                onClick={() => navigate('/app/profile')}
+                className="flex items-center gap-2.5 h-9 px-2 rounded-[6px] hover:bg-[#1B202B] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F2B95F] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0E1117] cursor-pointer"
+                aria-label="Profile"
+              >
+                <div className="w-8 h-8 rounded-full bg-[#1B202B] border border-[#2A313D] flex items-center justify-center text-xs font-bold text-[#F2B95F]">
+                  {user?.name?.charAt(0)?.toUpperCase() || user?.email?.charAt(0)?.toUpperCase() || 'U'}
+                </div>
+                <span className="text-sm text-[#A8B0BD] font-medium max-w-[160px] truncate">
+                  {user?.name || user?.email || 'User'}
+                </span>
+              </button>
             </div>
 
             {/* Mobile menu button */}
@@ -139,6 +146,16 @@ export default function AppShell() {
               );
             })}
             <div className="border-t border-[#2A313D] mt-2 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  navigate('/app/profile');
+                }}
+                className="w-full h-10 px-4 inline-flex items-center rounded-[6px] text-[13px] font-medium text-[#707A8A] hover:text-[#A8B0BD] hover:bg-[#1B202B] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F2B95F]"
+              >
+                Profile
+              </button>
               <button
                 type="button"
                 onClick={() => {

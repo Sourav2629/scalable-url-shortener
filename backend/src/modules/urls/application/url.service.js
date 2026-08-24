@@ -20,6 +20,7 @@ function anonymizeIp(ip) {
 }
 
 function serializeUrl(url) {
+  const isExpired = Boolean(url.expiresAt && url.expiresAt <= new Date());
   return {
     id: url._id.toString(),
     owner: url.owner ? url.owner.toString() : null,
@@ -30,6 +31,7 @@ function serializeUrl(url) {
     expiresAt: url.expiresAt,
     clickCount: url.clickCount,
     isActive: url.isActive,
+    isExpired,
     createdAt: url.createdAt,
     updatedAt: url.updatedAt,
   };
@@ -161,7 +163,7 @@ class UrlService {
       throw new AppError('URL not found.', 404);
     }
 
-    if (url.expiresAt && url.expiresAt < new Date()) {
+    if (url.expiresAt && url.expiresAt <= new Date()) {
       throw new AppError('URL has expired.', 404);
     }
 
