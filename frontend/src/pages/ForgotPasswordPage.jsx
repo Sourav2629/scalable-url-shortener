@@ -1,49 +1,32 @@
-import { useState, useCallback, useEffect } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import * as authService from '../services/auth.service';
 
-export default function LoginPage() {
-  const { login, isAuthenticated } = useAuth();
+const SESSION_STORAGE_KEY = 'emailPasswordReset';
+
+export default function ForgotPasswordPage() {
   const navigate = useNavigate();
-  const location = useLocation();
 
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [errors, setErrors] = useState({});
   const [serverError, setServerError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  const from = location.state?.from?.pathname || '/app';
-
-  // Redirect authenticated users away from the login screen. Runs as an effect
-  // so we never trigger navigation (a router state update) during render.
-  useEffect(() => {
-    if (isAuthenticated) {
-      navigate(from, { replace: true });
-    }
-  }, [isAuthenticated, from, navigate]);
-
-  const validate = useCallback(() => {
-    const next = {};
-
+  const validate = () => {
     if (!email.trim()) {
-      next.email = 'Email address is required.';
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-      next.email = 'Please enter a valid email address.';
+      return { email: 'Email address is required.' };
     }
-
-    if (!password) {
-      next.password = 'Password is required.';
-    } else if (password.trim().length < 8) {
-      next.password = 'Password must be at least 8 characters long.';
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      return { email: 'Please enter a valid email address.' };
     }
-
-    return next;
-  }, [email, password]);
+    return {};
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setServerError('');
+    setSuccessMessage('');
 
     const validationErrors = validate();
     if (Object.keys(validationErrors).length > 0) {
@@ -55,21 +38,26 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
-      await login({ email: email.trim().toLowerCase(), password });
-      navigate(from, { replace: true });
+      const normalizedEmail = email.trim().toLowerCase();
+      await authService.forgotPassword({ email: normalizedEmail });
+
+      // Store email for the reset page
+      sessionStorage.setItem(SESSION_STORAGE_KEY, normalizedEmail);
+
+      setSuccessMessage('A password reset code has been sent to your email.');
+
+      // Navigate to reset page after brief delay
+      setTimeout(() => {
+        navigate('/reset-password', {
+          replace: true,
+          state: { email: normalizedEmail },
+        });
+      }, 1200);
     } catch (err) {
       const status = err.response?.status;
-      const message = err.response?.data?.message || err.response?.data?.error?.message || err.message;
+      const message = err.response?.data?.message || err.message;
 
-      if (status === 403 && err.response?.data?.code === 'EMAIL_NOT_VERIFIED') {
-        // Unverified email — redirect to verification page
-        const unverifiedEmail = err.response?.data?.email || email.trim().toLowerCase();
-        sessionStorage.setItem('emailVerificationEmail', unverifiedEmail);
-        navigate('/verify-email', { replace: true, state: { email: unverifiedEmail } });
-        return;
-      } else if (status === 401) {
-        setServerError('Invalid email or password.');
-      } else if (status === 429) {
+      if (status === 429) {
         setServerError('Too many attempts. Please try again later.');
       } else if (!err.response) {
         setServerError('Network error. Please check your connection and try again.');
@@ -81,10 +69,6 @@ export default function LoginPage() {
     }
   };
 
-  // All hooks run above this point, so this conditional return keeps hook order
-  // stable while avoiding a flash of the form for already-authenticated users.
-  if (isAuthenticated) return null;
-
   return (
     <div className="w-full">
       {/* Mobile-only brand message */}
@@ -94,24 +78,25 @@ export default function LoginPage() {
           LINKSPHERE
         </div>
         <h1 className="text-[32px] font-extrabold tracking-[-0.03em] leading-[1.04] text-[#F5F7FA]">
-          TAKE CONTROL<br />OF YOUR LINKS.
+          FORGOT YOUR<br />PASSWORD?
         </h1>
       </div>
 
-      {/* Login card */}
+      {/* Card */}
       <div className="border border-[#2A313D] bg-[#151922] rounded-[14px] overflow-hidden">
         {/* Card header */}
         <div className="px-6 md:px-7 py-4 border-b border-[#2A313D] bg-[#1B202B]/40 flex items-center justify-between">
           <span className="text-[11px] font-mono font-bold tracking-[0.14em] uppercase text-[#F5F7FA] flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-[#F2B95F]" aria-hidden="true" />
-            SIGN IN
+            RESET PASSWORD
           </span>
           <span className="text-[10px] font-mono tracking-wider uppercase text-[#707A8A]">
-            ACCOUNT ACCESS
+            RECOVERY
           </span>
         </div>
 
         <div className="p-6 md:p-7">
+          {/* Server error */}
           {serverError && (
             <div
               className="mb-5 p-3 border border-[#F06B7A]/30 bg-[#F06B7A]/10 rounded-[8px] text-sm text-[#F06B7A] flex items-center gap-2"
@@ -125,17 +110,38 @@ export default function LoginPage() {
             </div>
           )}
 
+          {/* Success message */}
+          {successMessage && (
+            <div
+              className="mb-5 p-3 border border-[#50CFA6]/30 bg-[#50CFA6]/10 rounded-[8px] text-sm text-[#50CFA6] flex items-center gap-2"
+              role="status"
+              aria-live="polite"
+            >
+              <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                <path fillRule="evenodd" d="M8 16A8 8 0 108 0a8 8 0 000 16zm3.78-9.72a.75.75 0 00-1.06-1.06L7 8.94 5.28 7.22a.75.75 0 00-1.06 1.06l2.25 2.25a.75.75 0 001.06 0l4.25-4.25z" clipRule="evenodd" />
+              </svg>
+              <span>{successMessage}</span>
+            </div>
+          )}
+
+          {/* Info text */}
+          <div className="mb-6">
+            <p className="text-[14px] text-[#A8B0BD] leading-[1.6]">
+              Enter the email address associated with your account and we&apos;ll send you a 6-digit code to reset your password.
+            </p>
+          </div>
+
           <form onSubmit={handleSubmit} noValidate className="space-y-5">
             {/* Email */}
             <div>
               <div className="flex items-center justify-between mb-2">
-                <label htmlFor="login-email" className="block text-[11px] font-semibold tracking-[0.14em] uppercase text-[#A8B0BD]">
+                <label htmlFor="forgot-email" className="block text-[11px] font-semibold tracking-[0.14em] uppercase text-[#A8B0BD]">
                   EMAIL
                 </label>
                 <span className="text-[10px] font-mono text-[#707A8A] uppercase tracking-wider">REQUIRED</span>
               </div>
               <input
-                id="login-email"
+                id="forgot-email"
                 type="email"
                 value={email}
                 onChange={(e) => {
@@ -150,62 +156,16 @@ export default function LoginPage() {
                   errors.email ? 'border-[#F06B7A]' : 'border-[#2A313D]'
                 }`}
                 aria-invalid={Boolean(errors.email)}
-                aria-describedby={errors.email ? 'login-email-error' : undefined}
+                aria-describedby={errors.email ? 'forgot-email-error' : undefined}
               />
               {errors.email && (
-                <p id="login-email-error" className="mt-1.5 text-xs text-[#F06B7A] font-medium flex items-center gap-1.5" role="alert">
+                <p id="forgot-email-error" className="mt-1.5 text-xs text-[#F06B7A] font-medium flex items-center gap-1.5" role="alert">
                   <svg className="w-3 h-3 flex-shrink-0" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
                     <path d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zM8 4a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 018 4zm0 8a.75.75 0 100-1.5.75.75 0 000 1.5z" />
                   </svg>
                   {errors.email}
                 </p>
               )}
-            </div>
-
-            {/* Password */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <label htmlFor="login-password" className="block text-[11px] font-semibold tracking-[0.14em] uppercase text-[#A8B0BD]">
-                  PASSWORD
-                </label>
-                <span className="text-[10px] font-mono text-[#707A8A] uppercase tracking-wider">8+ CHARS</span>
-              </div>
-              <input
-                id="login-password"
-                type="password"
-                value={password}
-                onChange={(e) => {
-                  setPassword(e.target.value);
-                  if (errors.password) setErrors((prev) => ({ ...prev, password: '' }));
-                  if (serverError) setServerError('');
-                }}
-                placeholder="••••••••"
-                autoComplete="current-password"
-                disabled={isLoading}
-                className={`w-full h-[52px] px-4 border bg-[#1B202B] text-[#F5F7FA] text-[14px] font-mono rounded-[8px] placeholder:text-[#707A8A]/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F2B95F] focus-visible:ring-offset-2 focus-visible:ring-offset-[#151922] transition-colors ${
-                  errors.password ? 'border-[#F06B7A]' : 'border-[#2A313D]'
-                }`}
-                aria-invalid={Boolean(errors.password)}
-                aria-describedby={errors.password ? 'login-password-error' : undefined}
-              />
-              {errors.password && (
-                <p id="login-password-error" className="mt-1.5 text-xs text-[#F06B7A] font-medium flex items-center gap-1.5" role="alert">
-                  <svg className="w-3 h-3 flex-shrink-0" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-                    <path d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zM8 4a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 018 4zm0 8a.75.75 0 100-1.5.75.75 0 000 1.5z" />
-                  </svg>
-                  {errors.password}
-                </p>
-              )}
-            </div>
-
-            {/* Forgot Password link */}
-            <div className="flex justify-end">
-              <Link
-                to="/forgot-password"
-                className="text-[13px] text-[#F2B95F] hover:text-[#E4A744] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F2B95F] focus-visible:ring-offset-2 focus-visible:ring-offset-[#151922] rounded-sm"
-              >
-                Forgot Password?
-              </Link>
             </div>
 
             {/* Submit */}
@@ -220,10 +180,10 @@ export default function LoginPage() {
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                   </svg>
-                  SIGNING IN…
+                  SENDING CODE…
                 </span>
               ) : (
-                'SIGN IN'
+                'SEND RESET CODE'
               )}
             </button>
           </form>
@@ -231,12 +191,12 @@ export default function LoginPage() {
           {/* Footer link */}
           <div className="mt-6 pt-5 border-t border-[#2A313D] text-center">
             <p className="text-sm text-[#A8B0BD]">
-              Don&apos;t have an account?{' '}
+              Remember your password?{' '}
               <Link
-                to="/register"
+                to="/login"
                 className="text-[#F2B95F] hover:text-[#E4A744] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F2B95F] focus-visible:ring-offset-2 focus-visible:ring-offset-[#151922] rounded-sm"
               >
-                Create one
+                Back to sign in
               </Link>
             </p>
           </div>

@@ -184,7 +184,7 @@ export default function LinksPage() {
       <div className="mb-8">
         <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-[#151922] border border-[#2A313D] text-[10px] font-mono font-semibold tracking-[0.14em] uppercase text-[#707A8A] mb-4">
           <span className="w-1.5 h-1.5 rounded-full bg-[#50CFA6]" aria-hidden="true" />
-          AUTHENTICATED
+         ALL LINKS
         </div>
 
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">

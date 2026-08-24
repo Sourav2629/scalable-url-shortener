@@ -29,7 +29,14 @@ api.interceptors.response.use(
     // If a protected endpoint returns 401, the session is invalid.
     // Clear the local session and redirect to login.
     // Skip login/register endpoints — 401 there means bad credentials, not an expired session.
-    const isAuthEndpoint = requestUrl.includes('/api/v1/auth/login') || requestUrl.includes('/api/v1/auth/register');
+    const isAuthEndpoint =
+      requestUrl.includes('/api/v1/auth/login') ||
+      requestUrl.includes('/api/v1/auth/register') ||
+      requestUrl.includes('/api/v1/auth/verify-email') ||
+      requestUrl.includes('/api/v1/auth/resend-verification') ||
+      requestUrl.includes('/api/v1/auth/forgot-password') ||
+      requestUrl.includes('/api/v1/auth/reset-password') ||
+      requestUrl.includes('/api/v1/auth/resend-password-reset');
 
     if (status === 401 && !isAuthEndpoint && !isRedirectingToLogin) {
       isRedirectingToLogin = true;

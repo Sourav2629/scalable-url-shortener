@@ -65,7 +65,11 @@ app.use((err, req, res, next) => {
     if (req.log) req.log.warn(err);
   }
 
-  res.status(statusCode).json({ message });
+  const response = { message };
+  if (err.code) response.code = err.code;
+  if (err.email) response.email = err.email;
+  if (statusCode === 409 && err.message.includes('already exists')) response.code = 'USER_EXISTS';
+  res.status(statusCode).json(response);
 });
 
 module.exports = app;

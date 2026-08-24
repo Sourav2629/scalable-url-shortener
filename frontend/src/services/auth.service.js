@@ -18,3 +18,28 @@ export async function getCurrentUser() {
 export async function logout() {
   await api.post('/api/v1/auth/logout');
 }
+
+export async function verifyEmail({ email, code }) {
+  const { data } = await api.post('/api/v1/auth/verify-email', { email, code });
+  return data;
+}
+
+export async function resendVerification({ email }) {
+  const { data } = await api.post('/api/v1/auth/resend-verification', { email });
+  return data;
+}
+
+export async function forgotPassword({ email }) {
+  const { data } = await api.post('/api/v1/auth/forgot-password', { email });
+  return data;
+}
+
+export async function resetPassword({ email, code, newPassword }) {
+  const { data } = await api.post('/api/v1/auth/reset-password', { email, code, newPassword });
+  return data;
+}
+
+export async function resendPasswordReset({ email }) {
+  const { data } = await api.post('/api/v1/auth/resend-password-reset', { email });
+  return data;
+}

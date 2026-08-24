@@ -71,6 +71,13 @@ const config = {
   redis: {
     getUrl: () => getOptionalEnvironmentVariable('REDIS_URL', 'redis://localhost:6379'),
   },
+  email: {
+    getProvider: () => getOptionalEnvironmentVariable('EMAIL_PROVIDER', 'brevo'),
+    getFromEmail: () => getOptionalEnvironmentVariable('EMAIL_FROM_EMAIL', 'noreply@linksphere.app'),
+    getFromName: () => getOptionalEnvironmentVariable('EMAIL_FROM_NAME', 'LinkSphere'),
+    getBrevoApiKey: () => getOptionalEnvironmentVariable('BREVO_API_KEY', ''),
+    getBrevoApiUrl: () => getOptionalEnvironmentVariable('BREVO_API_URL', 'https://api.brevo.com/v3'),
+  },
 };
 
 module.exports = config;

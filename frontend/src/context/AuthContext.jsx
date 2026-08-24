@@ -69,11 +69,11 @@ export function AuthProvider({ children }) {
 
   const register = useCallback(
     async (credentials) => {
+      // Registration does not return tokens — email must be verified first
       const data = await authService.register(credentials);
-      persistSession(data);
       return data;
     },
-    [persistSession]
+    []
   );
 
   const logout = useCallback(async () => {
@@ -86,6 +86,19 @@ export function AuthProvider({ children }) {
     }
   }, [clearSession]);
 
+  const refreshUser = useCallback(async () => {
+    const { user: currentUser } = await authService.getCurrentUser();
+    setUser(currentUser);
+  }, []);
+
+  // Called after successful email verification — the backend returns tokens
+  const persistVerificationSession = useCallback(
+    (authData) => {
+      persistSession(authData);
+    },
+    [persistSession]
+  );
+
   const value = useMemo(
     () => ({
       user,
@@ -95,8 +108,10 @@ export function AuthProvider({ children }) {
       login,
       register,
       logout,
+      refreshUser,
+      persistVerificationSession,
     }),
-    [user, accessToken, isInitializing, login, register, logout]
+    [user, accessToken, isInitializing, login, register, logout, refreshUser, persistVerificationSession]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

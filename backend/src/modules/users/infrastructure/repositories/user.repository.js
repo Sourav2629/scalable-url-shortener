@@ -32,6 +32,22 @@ class UserRepository {
       { new: true },
     );
   }
+
+  async markEmailVerified(id) {
+    return User.findOneAndUpdate(
+      { _id: id, isDeleted: false },
+      { isEmailVerified: true },
+      { new: true },
+    );
+  }
+
+  async updatePassword(id, passwordHash) {
+    return User.findOneAndUpdate(
+      { _id: id, isDeleted: false },
+      { password: passwordHash },
+      { new: true },
+    );
+  }
 }
 
 module.exports = UserRepository;

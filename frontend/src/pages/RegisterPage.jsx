@@ -20,17 +20,16 @@ export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  // If already authenticated, redirect to /app
-  if (isAuthenticated) {
-    navigate('/app', { replace: true });
-    return null;
-  }
+
 
   // Zod validation schema
   const registerSchema = z.object({
     name: z.string().min(1, 'Full name is required.').max(100, 'Full name must be 100 characters or less.'),
     email: z.string().min(1, 'Email address is required.').email('Please enter a valid email address.'),
-    password: z.string().min(1, 'Password is required.').min(8, 'Password must be at least 8 characters long.'),
+    password: z.string().min(1, 'Password is required.').min(8, 'Password must be at least 8 characters long.').refine(
+      (val) => val.trim().length >= 8,
+      'Password must be at least 8 characters long.'
+    ),
     confirmPassword: z.string().min(1, 'Please confirm your password.'),
   }).refine((data) => data.password === data.confirmPassword, {
     message: 'Passwords do not match.',
@@ -78,12 +77,14 @@ export default function RegisterPage() {
     setIsLoading(true);
 
     try {
+      const registeredEmail = formData.email.trim().toLowerCase();
       await register({
         name: formData.name.trim(),
-        email: formData.email.trim().toLowerCase(),
+        email: registeredEmail,
         password: formData.password,
       });
-      navigate('/app', { replace: true });
+      sessionStorage.setItem('emailVerificationEmail', registeredEmail);
+      navigate('/verify-email', { replace: true, state: { email: registeredEmail } });
     } catch (err) {
       const status = err.response?.status;
       const message = err.response?.data?.message || err.response?.data?.error?.message || err.message;

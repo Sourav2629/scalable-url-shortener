@@ -10,6 +10,9 @@ import OverviewPage from './pages/OverviewPage';
 import LinksPage from './pages/LinksPage';
 import CreateLinkPage from './pages/CreateLinkPage';
 import LinkDetailsPage from './pages/LinkDetailsPage';
+import VerifyEmailPage from './pages/VerifyEmailPage';
+import ForgotPasswordPage from './pages/ForgotPasswordPage';
+import ResetPasswordPage from './pages/ResetPasswordPage';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 
 export default function App() {
@@ -22,10 +25,13 @@ export default function App() {
             <Route index element={<HomePage />} />
           </Route>
 
-          {/* Auth routes (login / register) */}
+          {/* Auth routes (login / register / verify-email) */}
           <Route element={<AuthLayout />}>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
+            <Route path="/verify-email" element={<VerifyEmailPage />} />
+            <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+            <Route path="/reset-password" element={<ResetPasswordPage />} />
           </Route>
 
           {/* Authenticated application */}

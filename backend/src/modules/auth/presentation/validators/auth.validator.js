@@ -1,6 +1,33 @@
 const AppError = require('../../../../shared/errors/app-error');
 
+// Email pattern: standard local@domain.tld structure.
+// Rejects: missing @, missing dot, whitespace, consecutive dots.
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/**
+ * Validate and normalize an email address.
+ * Returns the normalized email string or throws an AppError via the next callback.
+ */
+function validateAndNormalizeEmail(email, next) {
+  if (typeof email !== 'string') {
+    return next(new AppError('A valid email address is required.', 400));
+  }
+
+  const trimmed = email.trim();
+
+  if (trimmed.length === 0 || !EMAIL_PATTERN.test(trimmed)) {
+    return next(new AppError('A valid email address is required.', 400));
+  }
+
+  const normalized = trimmed.toLowerCase();
+
+  // Reject consecutive dots in the local or domain part.
+  if (normalized.includes('..')) {
+    return next(new AppError('A valid email address is required.', 400));
+  }
+
+  return normalized;
+}
 
 function validateRegister(req, res, next) {
   const { name, email, password } = req.body || {};
@@ -13,16 +40,15 @@ function validateRegister(req, res, next) {
     return next(new AppError('Full name must be 100 characters or less.', 400));
   }
 
-  if (typeof email !== 'string' || !EMAIL_PATTERN.test(email.trim())) {
-    return next(new AppError('A valid email address is required.', 400));
-  }
+  const normalizedEmail = validateAndNormalizeEmail(email, next);
+  if (normalizedEmail === undefined) return; // error already forwarded via next()
 
-  if (typeof password !== 'string' || password.length < 8) {
+  if (typeof password !== 'string' || password.trim().length < 8) {
     return next(new AppError('Password must be at least 8 characters long.', 400));
   }
 
   req.body.name = name.trim();
-  req.body.email = email.trim().toLowerCase();
+  req.body.email = normalizedEmail;
 
   return next();
 }
@@ -30,15 +56,14 @@ function validateRegister(req, res, next) {
 function validateLogin(req, res, next) {
   const { email, password } = req.body || {};
 
-  if (typeof email !== 'string' || !EMAIL_PATTERN.test(email.trim())) {
-    return next(new AppError('A valid email address is required.', 400));
-  }
+  const normalizedEmail = validateAndNormalizeEmail(email, next);
+  if (normalizedEmail === undefined) return; // error already forwarded via next()
 
-  if (typeof password !== 'string' || password.length < 8) {
+  if (typeof password !== 'string' || password.trim().length < 8) {
     return next(new AppError('Password must be at least 8 characters long.', 400));
   }
 
-  req.body.email = email.trim().toLowerCase();
+  req.body.email = normalizedEmail;
 
   return next();
 }
