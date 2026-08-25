@@ -1,16 +1,66 @@
-# React + Vite
+# LinkSphere Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+React 19 single-page application for the LinkSphere URL shortener.
 
-Currently, two official plugins are available:
+## Tech Stack
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+| Technology | Purpose |
+|---|---|
+| **React 19** | UI framework |
+| **React Router 7** | Client-side routing |
+| **Vite 8** | Build tool and dev server |
+| **Tailwind CSS 4** | Utility-first styling |
+| **Axios** | HTTP client with interceptors and single-flight refresh |
+| **Recharts** | Analytics charts |
+| **date-fns** | Date formatting |
+| **OxLint** | Fast linting |
+| **Zod** | Schema validation |
 
-## React Compiler
+## Getting Started
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+```bash
+npm install
+cp .env.example .env
+# Edit .env with your API base URL
+npm run dev
+```
 
-## Expanding the Oxlint configuration
+## Scripts
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and Oxlint's TypeScript related rules in your project.
+| Command | Description |
+|---|---|
+| `npm run dev` | Start dev server (http://localhost:5173) |
+| `npm run build` | Production build |
+| `npm run preview` | Preview production build |
+| `npm run lint` | Run OxLint |
+
+## Environment Variables
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `VITE_API_BASE_URL` | No | `http://localhost:5000` | Backend API base URL |
+| `VITE_PUBLIC_REDIRECT_BASE_URL` | No | `http://localhost:5000` | Base URL for generated short links |
+
+## Architecture
+
+### Axios Configuration
+
+- Request interceptor attaches `Authorization: Bearer <token>` from localStorage
+- **Single-flight refresh:** Only one refresh request at a time; concurrent 401s queue behind the in-flight refresh
+- `_retry` flag prevents queued requests from triggering a second refresh cycle
+- Auth endpoints excluded from 401 redirect logic
+- Failed refresh clears tokens and redirects to `/login`
+
+### Key Directories
+
+```
+src/
+  components/     # Reusable UI components (auth/, brand/, layout/, url/)
+  context/        # React Context (AuthContext)
+  hooks/          # Custom hooks (useLinks, useLinkDetails, useOverview)
+  layouts/        # Route layouts (RootLayout, AuthLayout, AppLayout)
+  pages/          # Page components (12 pages)
+  services/       # API client and service functions
+  shared/         # Shared validators
+  utils/          # Utility functions
+```
