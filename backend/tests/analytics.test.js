@@ -1,8 +1,45 @@
+const mongoose = require('mongoose');
+
+// Mock the AnalyticsEvent Mongoose model at file level so it's hoisted before
+// any require() of the repository.  This avoids a real MongoDB connection while
+// still allowing us to inspect the aggregate pipeline.
+const mockAggregate = jest.fn();
+jest.mock('../src/modules/analytics/infrastructure/models/analytics-event.model', () => ({
+  aggregate: mockAggregate,
+  create: jest.fn(),
+  deleteMany: jest.fn(),
+  schema: { index: jest.fn() },
+}));
+
 const AnalyticsService = require('../src/modules/analytics/application/analytics.service');
 const AnalyticsPublisher = require('../src/modules/analytics/application/analytics.publisher');
 const { parseUserAgent } = require('../src/modules/analytics/utils/ua-parser');
 const { classifyReferrer } = require('../src/modules/analytics/utils/referrer-classifier');
 const AppError = require('../src/shared/errors/app-error');
+
+// ---- helpers: build repository-grouped mock shapes ----
+
+function groupedRows(pairs) {
+  return pairs.map(([value, clicks]) => ({ _id: value, clicks }));
+}
+
+function emptyBreakdown() {
+  return {
+    browsers: [],
+    operatingSystems: [],
+    devices: [],
+    trafficSources: [],
+  };
+}
+
+function richBreakdown() {
+  return {
+    browsers: groupedRows([['Chrome', 3], ['Firefox', 1]]),
+    operatingSystems: groupedRows([['Windows', 3], ['MacOS', 1]]),
+    devices: groupedRows([['Desktop', 3], ['Mobile', 1]]),
+    trafficSources: groupedRows([['Search', 2], ['Direct', 1], ['Social', 1]]),
+  };
+}
 
 describe('Analytics Module', () => {
   describe('User Agent Parser Utility', () => {
@@ -130,42 +167,37 @@ describe('Analytics Module', () => {
       });
 
       test('User B cannot access User A analytics — ownership enforced', async () => {
-        // User A owns the URL — their query returns the document
         mockUrlRepo.findByIdForOwner.mockImplementation((id, ownerId) => {
           if (ownerId === 'userA') {
             return Promise.resolve({ _id: id, owner: 'userA', clickCount: 10 });
           }
-          // User B queries the same ID — wrong owner, returns null
           return Promise.resolve(null);
         });
 
-        mockAnalyticsRepo.getSummary.mockResolvedValue([
-          {
-            totalClicks: 10,
-            topBrowsers: ['Chrome'],
-            topOS: ['Windows'],
-            topDevices: ['Desktop'],
-            topSources: ['Direct'],
-          },
-        ]);
+        // Repository now returns the grouped shape
+        mockAnalyticsRepo.getSummary.mockResolvedValue({
+          browsers: groupedRows([['Chrome', 10]]),
+          operatingSystems: groupedRows([['Windows', 10]]),
+          devices: groupedRows([['Desktop', 10]]),
+          trafficSources: groupedRows([['Direct', 10]]),
+        });
 
         // User A can get their analytics
         const summary = await analyticsService.getSummary('userA', 'url1');
         expect(summary.totalClicks).toBe(10);
-        expect(summary.topBrowsers).toEqual([{ name: 'Chrome', clicks: 1 }]);
+        expect(summary.topBrowsers).toEqual([{ name: 'Chrome', clicks: 10 }]);
 
         // User B cannot get User A's analytics — throws 404
         await expect(analyticsService.getSummary('userB', 'url1')).rejects.toThrow(
           expect.objectContaining({ statusCode: 404 })
         );
 
-        // User B's query must have been called with the correct params
         expect(mockUrlRepo.findByIdForOwner).toHaveBeenCalledWith('url1', 'userB');
       });
 
       test('returns default empty summary when no analytics data exists', async () => {
         mockUrlRepo.findByIdForOwner.mockResolvedValue({ _id: 'url1', owner: 'user1' });
-        mockAnalyticsRepo.getSummary.mockResolvedValue([]);
+        mockAnalyticsRepo.getSummary.mockResolvedValue(emptyBreakdown());
 
         const summary = await analyticsService.getSummary('user1', 'url1');
         expect(summary).toEqual({
@@ -178,28 +210,20 @@ describe('Analytics Module', () => {
         });
       });
 
-      test('formats top-N aggregation counts correctly', async () => {
-        // totalClicks always comes from the URL document's clickCount
+      test('formats server-side grouped results correctly', async () => {
         mockUrlRepo.findByIdForOwner.mockResolvedValue({ _id: 'url1', owner: 'user1', clickCount: 5 });
-        mockAnalyticsRepo.getSummary.mockResolvedValue([
-          {
-            totalClicks: 3,
-            topBrowsers: ['Chrome', 'Chrome', 'Firefox'],
-            topOS: ['Windows', 'Windows', 'MacOS'],
-            topDevices: ['Desktop', 'Desktop', 'Mobile'],
-            topSources: ['Search', 'Direct', 'Search'],
-          },
-        ]);
+        mockAnalyticsRepo.getSummary.mockResolvedValue(richBreakdown());
 
         const summary = await analyticsService.getSummary('user1', 'url1');
         expect(summary.totalClicks).toBe(5);
         expect(summary.topBrowsers).toEqual([
-          { name: 'Chrome', clicks: 2 },
+          { name: 'Chrome', clicks: 3 },
           { name: 'Firefox', clicks: 1 },
         ]);
         expect(summary.topTrafficSources).toEqual([
           { name: 'Search', clicks: 2 },
           { name: 'Direct', clicks: 1 },
+          { name: 'Social', clicks: 1 },
         ]);
       });
     });
@@ -233,11 +257,9 @@ describe('Analytics Module', () => {
           { _id: '2026-08-20', clicks: 5 },
         ]);
 
-        // User A can get timeseries
         const ts = await analyticsService.getTimeseries('userA', 'url1', '2026-08-20', '2026-08-21', 'day');
         expect(ts.data).toHaveLength(1);
 
-        // User B cannot
         await expect(
           analyticsService.getTimeseries('userB', 'url1', '2026-08-20', '2026-08-21', 'day')
         ).rejects.toThrow(expect.objectContaining({ statusCode: 404 }));
@@ -297,14 +319,12 @@ describe('Analytics Module', () => {
         dupError.code = 11000;
 
         mockAnalyticsRepo.create
-          .mockResolvedValueOnce(event) // first call succeeds
-          .mockRejectedValueOnce(dupError); // second call is duplicate
+          .mockResolvedValueOnce(event)
+          .mockRejectedValueOnce(dupError);
 
-        // First call succeeds
         await analyticsService.processClickEvent(event);
         expect(mockAnalyticsRepo.create).toHaveBeenCalledTimes(1);
 
-        // Second call with same eventId does NOT throw
         await expect(analyticsService.processClickEvent(event)).resolves.toBeUndefined();
         expect(mockAnalyticsRepo.create).toHaveBeenCalledTimes(2);
       });
@@ -342,27 +362,24 @@ describe('Analytics Module', () => {
 
     describe('API Resilience — clickCount vs AnalyticsEvent', () => {
       test('getSummary uses clickCount as authoritative total, not AnalyticsEvent count', async () => {
-        // Simulate: 16 total clicks, but only 5 analytics events processed
         mockUrlRepo.findByIdForOwner.mockResolvedValue({ _id: 'url1', owner: 'user1', clickCount: 16 });
-        mockAnalyticsRepo.getSummary.mockResolvedValue([{
-          totalClicks: 5,
-          topBrowsers: ['Chrome', 'Chrome', 'Chrome', 'Chrome', 'Chrome'],
-          topOS: ['Windows', 'Windows', 'Windows', 'Windows', 'Windows'],
-          topDevices: ['Desktop', 'Desktop', 'Desktop', 'Desktop', 'Desktop'],
-          topSources: ['Direct', 'Direct', 'Direct', 'Direct', 'Direct'],
-        }]);
+        mockAnalyticsRepo.getSummary.mockResolvedValue({
+          browsers: groupedRows([['Chrome', 5]]),
+          operatingSystems: groupedRows([['Windows', 5]]),
+          devices: groupedRows([['Desktop', 5]]),
+          trafficSources: groupedRows([['Direct', 5]]),
+        });
 
         const summary = await analyticsService.getSummary('user1', 'url1');
 
         // totalClicks must be 16 (from Url.clickCount), NOT 5 (from AnalyticsEvent)
         expect(summary.totalClicks).toBe(16);
-        // But breakdowns come from the 5 tracked events
         expect(summary.topBrowsers).toEqual([{ name: 'Chrome', clicks: 5 }]);
       });
 
       test('getSummary returns empty breakdowns when no analytics events exist', async () => {
         mockUrlRepo.findByIdForOwner.mockResolvedValue({ _id: 'url1', owner: 'user1', clickCount: 10 });
-        mockAnalyticsRepo.getSummary.mockResolvedValue([]);
+        mockAnalyticsRepo.getSummary.mockResolvedValue(emptyBreakdown());
 
         const summary = await analyticsService.getSummary('user1', 'url1');
 
@@ -370,6 +387,31 @@ describe('Analytics Module', () => {
         expect(summary.topBrowsers).toEqual([]);
         expect(summary.topDevices).toEqual([]);
         expect(summary.topTrafficSources).toEqual([]);
+      });
+
+      test('_format correctly converts grouped rows [{_id, clicks}] to API shape [{name, clicks}]', async () => {
+        mockUrlRepo.findByIdForOwner.mockResolvedValue({ _id: 'url1', owner: 'user1', clickCount: 10 });
+        mockAnalyticsRepo.getSummary.mockResolvedValue(richBreakdown());
+
+        const summary = await analyticsService.getSummary('user1', 'url1');
+
+        expect(summary.topBrowsers).toEqual([
+          { name: 'Chrome', clicks: 3 },
+          { name: 'Firefox', clicks: 1 },
+        ]);
+        expect(summary.topOperatingSystems).toEqual([
+          { name: 'Windows', clicks: 3 },
+          { name: 'MacOS', clicks: 1 },
+        ]);
+        expect(summary.topDevices).toEqual([
+          { name: 'Desktop', clicks: 3 },
+          { name: 'Mobile', clicks: 1 },
+        ]);
+        expect(summary.topTrafficSources).toEqual([
+          { name: 'Search', clicks: 2 },
+          { name: 'Direct', clicks: 1 },
+          { name: 'Social', clicks: 1 },
+        ]);
       });
     });
   });
@@ -380,7 +422,6 @@ describe('Analytics Module', () => {
       const { analyticsQueue } = require('../src/infrastructure/queue/analytics.queue');
       const spy = jest.spyOn(analyticsQueue, 'add').mockRejectedValue(new Error('ECONNREFUSED'));
 
-      // Must NOT throw — the redirect flow is isolated from queue failures
       await expect(publisher.publishClickEvent({
         eventId: 'test-event-1',
         urlId: 'url1',
@@ -410,5 +451,185 @@ describe('Analytics Module', () => {
 
       spy.mockRestore();
     });
+  });
+
+  // ========================================================================
+  // Repository — Server-Side Aggregation Pipeline Tests
+  // ========================================================================
+
+  describe('AnalyticsRepository — Server-Side Aggregation Pipeline', () => {
+    const { analyticsRepository } = require('../src/modules/analytics/infrastructure/repositories/analytics.repository');
+
+    beforeEach(() => {
+      mockAggregate.mockReset();
+    });
+
+    test('getSummary uses $facet with 4 server-side grouped dimensions', async () => {
+      mockAggregate.mockResolvedValue([{
+        browsers: [{ _id: 'Chrome', clicks: 5 }],
+        operatingSystems: [{ _id: 'Windows', clicks: 5 }],
+        devices: [{ _id: 'Desktop', clicks: 5 }],
+        trafficSources: [{ _id: 'Direct', clicks: 5 }],
+      }]);
+
+      await analyticsRepository.getSummary('507f1f77bcf86cd799439011');
+
+      // Aggregate called once (single DB round-trip)
+      expect(mockAggregate).toHaveBeenCalledTimes(1);
+
+      const pipeline = mockAggregate.mock.calls[0][0];
+
+      // Pipeline starts with $match on urlId
+      expect(pipeline[0]).toHaveProperty('$match');
+
+      // Pipeline uses $facet — NOT $push
+      const facetStage = pipeline.find(s => s.$facet);
+      expect(facetStage).toBeDefined();
+
+      // $facet contains exactly 4 dimensions
+      const dimensions = Object.keys(facetStage.$facet);
+      expect(dimensions).toEqual(
+        expect.arrayContaining(['browsers', 'operatingSystems', 'devices', 'trafficSources'])
+      );
+
+      // Each dimension pipeline: $group + $sort + $limit: 5
+      for (const dim of dimensions) {
+        const dimPipeline = facetStage.$facet[dim];
+        expect(dimPipeline.some(s => s.$group)).toBe(true);
+        expect(dimPipeline.some(s => s.$sort)).toBe(true);
+        const limitStage = dimPipeline.find(s => s.$limit);
+        expect(limitStage).toBeDefined();
+        expect(limitStage.$limit).toBe(5);
+      }
+    });
+
+    test('getSummary pipeline does NOT contain $push anywhere', async () => {
+      mockAggregate.mockResolvedValue([emptyBreakdown()]);
+
+      await analyticsRepository.getSummary('507f1f77bcf86cd799439011');
+
+      const pipeline = mockAggregate.mock.calls[0][0];
+      const pipelineStr = JSON.stringify(pipeline);
+      expect(pipelineStr).not.toContain('$push');
+    });
+
+    test('getSummary returns empty breakdowns when no documents match', async () => {
+      // Aggregate returns empty array (no matching events)
+      mockAggregate.mockResolvedValue([]);
+
+      const result = await analyticsRepository.getSummary('507f1f77bcf86cd799439011');
+
+      expect(result).toEqual({
+        browsers: [],
+        operatingSystems: [],
+        devices: [],
+        trafficSources: [],
+      });
+    });
+
+    test('getSummary returns grouped result from MongoDB as-is', async () => {
+      const mongoResult = {
+        browsers: [{ _id: 'Chrome', clicks: 10 }, { _id: 'Firefox', clicks: 3 }],
+        operatingSystems: [{ _id: 'Windows', clicks: 12 }],
+        devices: [{ _id: 'Mobile', clicks: 8 }, { _id: 'Desktop', clicks: 5 }],
+        trafficSources: [{ _id: 'Search', clicks: 7 }, { _id: 'Social', clicks: 4 }],
+      };
+      mockAggregate.mockResolvedValue([mongoResult]);
+
+      const result = await analyticsRepository.getSummary('507f1f77bcf86cd799439011');
+
+      expect(result).toEqual(mongoResult);
+    });
+
+    test('getSummary converts string urlId to ObjectId in $match', async () => {
+      mockAggregate.mockResolvedValue([emptyBreakdown()]);
+
+      const urlIdStr = '507f1f77bcf86cd799439011';
+      await analyticsRepository.getSummary(urlIdStr);
+
+      const pipeline = mockAggregate.mock.calls[0][0];
+      const matchStage = pipeline[0].$match;
+      expect(matchStage.urlId).toBeInstanceOf(mongoose.Types.ObjectId);
+      expect(matchStage.urlId.toString()).toBe(urlIdStr);
+    });
+
+    // ====================================================================
+    // Scalability Tests — Large Event Volume
+    // ====================================================================
+
+    test('scalability: large event volume returns only top-5 per dimension (bounded memory)', async () => {
+      // Simulate what MongoDB returns after server-side grouping:
+      // even with 1,000,000 clicks and 200 distinct browser values,
+      // MongoDB's $group + $sort + $limit: 5 returns at most 5 rows.
+      const largeVolumeResult = {
+        browsers: [
+          { _id: 'Chrome', clicks: 500000 },
+          { _id: 'Safari', clicks: 200000 },
+          { _id: 'Firefox', clicks: 150000 },
+          { _id: 'Edge', clicks: 100000 },
+          { _id: 'Opera', clicks: 50000 },
+        ],
+        operatingSystems: [
+          { _id: 'Windows', clicks: 400000 },
+          { _id: 'iOS', clicks: 250000 },
+          { _id: 'Android', clicks: 200000 },
+          { _id: 'MacOS', clicks: 100000 },
+          { _id: 'Linux', clicks: 50000 },
+        ],
+        devices: [
+          { _id: 'Desktop', clicks: 500000 },
+          { _id: 'Mobile', clicks: 400000 },
+          { _id: 'Tablet', clicks: 100000 },
+        ],
+        trafficSources: [
+          { _id: 'Direct', clicks: 300000 },
+          { _id: 'Search', clicks: 250000 },
+          { _id: 'Social', clicks: 200000 },
+          { _id: 'Referral', clicks: 150000 },
+          { _id: 'Other', clicks: 100000 },
+        ],
+      };
+
+      mockAggregate.mockResolvedValue([largeVolumeResult]);
+
+      const result = await analyticsRepository.getSummary('507f1f77bcf86cd799439011');
+
+      // Each dimension is bounded
+      expect(result.browsers).toHaveLength(5);
+      expect(result.operatingSystems).toHaveLength(5);
+      expect(result.devices).toHaveLength(3); // only 3 distinct device types
+      expect(result.trafficSources).toHaveLength(5);
+
+      // Pipeline enforces $limit: 5 at the DB level
+      const pipeline = mockAggregate.mock.calls[0][0];
+      const facetStage = pipeline.find(s => s.$facet);
+      for (const dim of Object.keys(facetStage.$facet)) {
+        const limitStage = facetStage.$facet[dim].find(s => s.$limit);
+        expect(limitStage.$limit).toBe(5);
+      }
+    });
+
+    test('scalability: application never receives unbounded arrays from repository', async () => {
+      // The repository contract: return structured [{_id, clicks}], NOT raw pushed arrays
+      mockAggregate.mockResolvedValue([{
+        browsers: groupedRows([['Chrome', 100]]),
+        operatingSystems: groupedRows([['Windows', 100]]),
+        devices: groupedRows([['Desktop', 100]]),
+        trafficSources: groupedRows([['Direct', 100]]),
+      }]);
+
+      const result = await analyticsRepository.getSummary('507f1f77bcf86cd799439011');
+
+      for (const dim of ['browsers', 'operatingSystems', 'devices', 'trafficSources']) {
+        expect(Array.isArray(result[dim])).toBe(true);
+        for (const row of result[dim]) {
+          expect(row).toHaveProperty('_id');
+          expect(row).toHaveProperty('clicks');
+          expect(typeof row.clicks).toBe('number');
+        }
+      }
+    });
+
+
   });
 });

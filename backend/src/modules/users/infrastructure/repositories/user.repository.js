@@ -17,10 +17,25 @@ class UserRepository {
     return User.create(userData);
   }
 
-  async updateRefreshToken(id, refreshToken) {
+  async updateRefreshToken(id, refreshToken, refreshTokenExpiresAt) {
     return User.findOneAndUpdate(
       { _id: id, isDeleted: false },
-      { refreshToken },
+      { refreshToken, refreshTokenExpiresAt },
+      { new: true },
+    );
+  }
+
+  /**
+   * Atomic single-use rotation guard: replaces the stored refresh-token hash
+   * ONLY if it still matches expectedTokenHash. Prevents a concurrent-replay
+   * race where two requests presenting the same valid refresh token both
+   * rotate successfully. Returns null when the stored token has already
+   * changed (i.e., another request consumed it first).
+   */
+  async updateRefreshTokenIfMatches(id, expectedTokenHash, refreshToken, refreshTokenExpiresAt) {
+    return User.findOneAndUpdate(
+      { _id: id, isDeleted: false, refreshToken: expectedTokenHash },
+      { refreshToken, refreshTokenExpiresAt },
       { new: true },
     );
   }
@@ -28,7 +43,7 @@ class UserRepository {
   async clearRefreshToken(id) {
     return User.findOneAndUpdate(
       { _id: id, isDeleted: false },
-      { refreshToken: null },
+      { refreshToken: null, refreshTokenExpiresAt: null },
       { new: true },
     );
   }

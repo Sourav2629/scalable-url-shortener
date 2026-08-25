@@ -1,4 +1,5 @@
 import api from './api';
+import axios from 'axios';
 
 export async function register({ name, email, password }) {
   const { data } = await api.post('/api/v1/auth/register', { name, email, password });
@@ -56,5 +57,14 @@ export async function changePassword({ currentPassword, newPassword }) {
 
 export async function deleteAccount({ password }) {
   const { data } = await api.delete('/api/v1/auth/account', { data: { password } });
+  return data;
+}
+
+export async function refreshToken(refreshTokenValue) {
+  const { data } = await axios.post(
+    `${api.defaults.baseURL}/api/v1/auth/refresh`,
+    { refreshToken: refreshTokenValue },
+    { headers: { 'Content-Type': 'application/json' } }
+  );
   return data;
 }

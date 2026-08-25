@@ -68,4 +68,16 @@ function validateLogin(req, res, next) {
   return next();
 }
 
-module.exports = { validateRegister, validateLogin };
+function validateRefreshToken(req, res, next) {
+  const { refreshToken } = req.body || {};
+
+  if (typeof refreshToken !== 'string' || refreshToken.trim().length === 0) {
+    return next(new AppError('A refresh token is required.', 400));
+  }
+
+  req.body.refreshToken = refreshToken.trim();
+
+  return next();
+}
+
+module.exports = { validateRegister, validateLogin, validateRefreshToken };

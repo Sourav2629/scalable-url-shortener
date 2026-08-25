@@ -41,19 +41,14 @@ class AnalyticsService {
     const url = await this.urlRepository.findByIdForOwner(urlId, ownerId);
     const totalClicks = url ? (url.clickCount || 0) : 0;
 
-    const result = await this.analyticsRepository.getSummary(urlId);
-    if (!result.length) {
-      return { urlId, totalClicks, topBrowsers: [], topOperatingSystems: [], topDevices: [], topTrafficSources: [] };
-    }
-
-    const data = result[0];
+    const breakdown = await this.analyticsRepository.getSummary(urlId);
     return {
       urlId,
       totalClicks,
-      topBrowsers: this._count(data.topBrowsers),
-      topOperatingSystems: this._count(data.topOS),
-      topDevices: this._count(data.topDevices),
-      topTrafficSources: this._count(data.topSources),
+      topBrowsers: this._format(breakdown.browsers),
+      topOperatingSystems: this._format(breakdown.operatingSystems),
+      topDevices: this._format(breakdown.devices),
+      topTrafficSources: this._format(breakdown.trafficSources),
     };
   }
 
@@ -84,10 +79,13 @@ class AnalyticsService {
     if (!url) throw new AppError('URL not found or unauthorized', 404);
   }
 
-  _count(arr) {
-    const counts = {};
-    arr.forEach(item => counts[item] = (counts[item] || 0) + 1);
-    return Object.entries(counts).map(([name, clicks]) => ({ name, clicks })).sort((a, b) => b.clicks - a.clicks).slice(0, 5);
+  /**
+   * Formats MongoDB-grouped rows [{ _id, clicks }] into the API shape [{ name, clicks }].
+   * Rows arrive already counted, sorted (clicks desc) and capped at the top N by the
+   * repository's server-side aggregation pipeline.
+   */
+  _format(rows) {
+    return (rows || []).map(({ _id, clicks }) => ({ name: _id === null ? 'Unknown' : _id, clicks }));
   }
 }
 

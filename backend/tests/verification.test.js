@@ -224,6 +224,7 @@ describe('AuthService — verifyEmail', () => {
     mockTokenService = {
       generateAccessToken: jest.fn().mockReturnValue('mock-access-token'),
       generateRefreshToken: jest.fn().mockReturnValue('mock-refresh-token'),
+      getRefreshTokenExpiryDate: jest.fn().mockReturnValue(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)),
     };
     mockEmailService = {};
     mockVerificationTokenRepo = {
@@ -579,11 +580,12 @@ describe('AuthService — Registration with OTP', () => {
       findByEmail: jest.fn(),
       findByEmailWithPassword: jest.fn(),
       create: jest.fn(),
-      updateRefreshToken: jest.fn(),
+      updateRefreshToken: jest.fn().mockResolvedValue({}),
     };
     mockTokenService = {
       generateAccessToken: jest.fn().mockReturnValue('mock-access-token'),
       generateRefreshToken: jest.fn().mockReturnValue('mock-refresh-token'),
+      getRefreshTokenExpiryDate: jest.fn().mockReturnValue(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)),
     };
     mockEmailService = {
       sendVerificationEmail: jest.fn().mockResolvedValue(undefined),
@@ -733,6 +735,7 @@ describe('Register → Resend → Verify Integration', () => {
     mockTokenService = {
       generateAccessToken: jest.fn().mockReturnValue('mock-access-token'),
       generateRefreshToken: jest.fn().mockReturnValue('mock-refresh-token'),
+      getRefreshTokenExpiryDate: jest.fn().mockReturnValue(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)),
     };
     mockEmailService = {
       sendVerificationEmail: jest.fn().mockResolvedValue(undefined),

@@ -25,6 +25,11 @@ const userSchema = new mongoose.Schema(
       default: null,
       select: false,
     },
+    refreshTokenExpiresAt: {
+      type: Date,
+      default: null,
+      select: false,
+    },
     passwordChangedAt: {
       type: Date,
       default: null,

@@ -2,6 +2,10 @@ const config = require('./config');
 const app = require('./app');
 const mongoose = require('mongoose');
 const { logger } = require('./shared/logger');
+const {
+  createGracefulShutdown,
+  registerCrashHandlers,
+} = require('./shared/utils/graceful-shutdown');
 
 async function startServer() {
   try {
@@ -14,30 +18,23 @@ async function startServer() {
       logger.info(`LinkSphere server is running at http://localhost:${port}`);
     });
 
-    const shutdown = async (signal) => {
-      logger.info(`${signal} received. Starting graceful shutdown...`);
-      
-      const timeout = setTimeout(() => {
-        logger.error('Could not close connections in time, forcefully shutting down');
-        process.exit(1);
-      }, config.server.getShutdownTimeout());
-
-      server.close(async () => {
+    // Single shared shutdown path for signals AND crashes. Idempotent, with
+    // the existing force-exit safety timeout preserved.
+    const shutdown = createGracefulShutdown({
+      log: logger,
+      timeoutMs: config.server.getShutdownTimeout(),
+      closeServer: (done) => server.close(done),
+      cleanup: async () => {
         logger.info('HTTP server closed.');
-        try {
-          await mongoose.disconnect();
-          logger.info('MongoDB connection closed.');
-          clearTimeout(timeout);
-          process.exit(0);
-        } catch (err) {
-          logger.error('Error during shutdown:', err);
-          process.exit(1);
-        }
-      });
-    };
+        await mongoose.disconnect();
+        logger.info('MongoDB connection closed.');
+      },
+    });
 
     process.on('SIGINT', () => shutdown('SIGINT'));
     process.on('SIGTERM', () => shutdown('SIGTERM'));
+
+    registerCrashHandlers({ log: logger, shutdown });
 
     server.on('error', (error) => {
       logger.error(`Failed to start LinkSphere server: ${error.message}`);

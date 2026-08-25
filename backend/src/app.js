@@ -4,7 +4,7 @@ const mongoose = require('mongoose');
 const AppError = require('./shared/errors/app-error');
 const { httpLogger } = require('./shared/logger');
 const { corsMiddleware } = require('./shared/middleware/cors.middleware');
-const { authLimiter, publicLimiter, publicShortenLimiter, apiLimiter } = require('./shared/middleware/rate-limiter.middleware');
+const { publicLimiter, publicShortenLimiter, apiLimiter } = require('./shared/middleware/rate-limiter.middleware');
 const authRoutes = require('./modules/auth/presentation/routes/auth.routes');
 const urlRoutes = require('./modules/urls/presentation/routes/url.routes');
 const analyticsRoutes = require('./modules/analytics/presentation/routes/analytics.routes');
@@ -12,7 +12,14 @@ const publicUrlRoutes = require('./modules/urls/presentation/routes/public-url.r
 const publicCreateUrlRoutes = require('./modules/urls/presentation/routes/public-create-url.routes');
 const publicAliasCheckRoutes = require('./modules/urls/presentation/routes/public-alias-check.routes');
 
+const config = require('./config');
+
 const app = express();
+
+// Configure trust proxy for correct client IP resolution behind a reverse proxy.
+// Set TRUST_PROXY env var: 'false' (default), 'true', or a hop count (1, 2, etc.).
+// Only enable when the app is deployed behind a trusted proxy/load balancer.
+app.set('trust proxy', config.server.getTrustProxy());
 
 app.use(helmet());
 app.use(corsMiddleware);
@@ -38,7 +45,7 @@ app.get('/health/ready', (req, res) => {
 });
 
 // API Routes
-app.use('/api/v1/auth', authLimiter, authRoutes);
+app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/urls', apiLimiter, urlRoutes);
 app.use('/api/v1/urls', apiLimiter, analyticsRoutes);
 app.use('/api/v1/public/urls', publicShortenLimiter, publicCreateUrlRoutes);

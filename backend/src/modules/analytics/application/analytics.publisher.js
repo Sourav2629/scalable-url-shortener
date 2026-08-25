@@ -17,8 +17,6 @@ class AnalyticsPublisher {
     } catch (error) {
       if (logger && logger.error) {
         logger.error({ err: error, eventId: event.eventId }, 'Failed to publish analytics event');
-      } else {
-        console.error('Failed to publish analytics event:', error);
       }
       // We do not re-throw here to ensure the redirect flow is isolated from queue failures.
     }

@@ -61,6 +61,11 @@ function createAuthController(authService) {
 
       res.status(200).json(result);
     },
+    refresh: async (req, res) => {
+      const result = await authService.refreshToken(req.body);
+
+      res.status(200).json(result);
+    },
   };
 }
 

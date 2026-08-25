@@ -1,6 +1,22 @@
 const crypto = require('crypto');
 const bcrypt = require('bcrypt');
 const AppError = require('../../../shared/errors/app-error');
+const { logSecurityEvent } = require('../../../shared/logger/security-event');
+
+/**
+ * SHA-256 pre-hash for refresh tokens before bcrypt.
+ *
+ * Bcrypt truncates input at 72 bytes. A JWT refresh token (e.g. 195 chars)
+ * has its distinguishing payload (sub claim) beyond the 72-byte boundary.
+ * Two tokens differing only in the last few characters of the sub claim
+ * share a >72-byte prefix and bcrypt treats them as equal.
+ *
+ * SHA-256 produces a fixed 64-hex-char digest that fits well within
+ * bcrypt's limit while preserving the full entropy of the original token.
+ */
+function hashTokenForStorage(token) {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
 
 const PASSWORD_SALT_ROUNDS = 12;
 const OTP_LENGTH = 6;
@@ -60,6 +76,7 @@ class AuthService {
       // Actually, keep it for backward compatibility and just resend OTP
       // The verify-email flow will set isEmailVerified=true on this existing User
       await this._sendOtpForUser(existingUser, name, email, password);
+      logSecurityEvent('auth.register.success', { email });
       return {
         message: 'A verification code has been sent to your email.',
         email,
@@ -83,6 +100,8 @@ class AuthService {
     // Generate and send OTP
     await this._sendOtpForPendingRegistration(email, name);
 
+    logSecurityEvent('auth.register.success', { email });
+
     return {
       message: 'Account created. Please verify your email.',
       email,
@@ -93,23 +112,31 @@ class AuthService {
     const user = await this.userRepository.findByEmailWithPassword(email);
 
     if (!user || !(await bcrypt.compare(password, user.password))) {
+      logSecurityEvent('auth.login.failed', { email, reason: 'invalid_credentials' });
       throw new AppError('Invalid email or password.', 401);
     }
 
     // Defense-in-depth: reject unverified users
     // (Users should only exist after verification, but check anyway)
     if (!user.isEmailVerified) {
+      logSecurityEvent('auth.login.failed', { userId: user._id.toString(), email: user.email, reason: 'email_not_verified' });
       const appError = new AppError('Please verify your email before signing in.', 403);
       appError.code = 'EMAIL_NOT_VERIFIED';
       appError.email = user.email;
       throw appError;
     }
 
-    return this.createAuthenticationResponse(user);
+    const authentication = await this.createAuthenticationResponse(user);
+
+    logSecurityEvent('auth.login.success', { userId: user._id.toString(), email: user.email });
+
+    return authentication;
   }
 
   async logout(userId) {
     await this.userRepository.clearRefreshToken(userId);
+
+    logSecurityEvent('auth.logout.success', { userId: userId.toString() });
   }
 
   async getCurrentUser(userId) {
@@ -169,6 +196,7 @@ class AuthService {
     }
 
     if (token.attempts >= token.maxAttempts) {
+      logSecurityEvent('auth.verification.locked', { email: pending.email, reason: 'max_attempts_exceeded' });
       throw new AppError('Too many failed attempts. Please register again.', 400);
     }
 
@@ -180,9 +208,11 @@ class AuthService {
       const remaining = Math.max(0, updatedToken.maxAttempts - updatedToken.attempts);
 
       if (remaining === 0) {
+        logSecurityEvent('auth.verification.locked', { email: pending.email, reason: 'attempts_exhausted' });
         throw new AppError('Too many failed attempts. Please register again.', 400);
       }
 
+      logSecurityEvent('auth.verification.failed', { email: pending.email, remainingAttempts: remaining });
       throw new AppError(
         `Invalid verification code. ${remaining} attempt${remaining === 1 ? '' : 's'} remaining.`,
         400,
@@ -217,6 +247,8 @@ class AuthService {
     // Delete the pending registration
     await this.pendingRegistrationRepository.deleteByEmail(pending.email);
 
+    logSecurityEvent('auth.verification.success', { userId: user._id.toString(), email: user.email });
+
     // Issue authentication tokens
     return this.createAuthenticationResponse(user);
   }
@@ -236,6 +268,7 @@ class AuthService {
     }
 
     if (token.attempts >= token.maxAttempts) {
+      logSecurityEvent('auth.verification.locked', { userId: user._id.toString(), email: user.email, reason: 'max_attempts_exceeded' });
       throw new AppError('Too many failed attempts. Please register again.', 400);
     }
 
@@ -246,9 +279,11 @@ class AuthService {
       const remaining = Math.max(0, updatedToken.maxAttempts - updatedToken.attempts);
 
       if (remaining === 0) {
+        logSecurityEvent('auth.verification.locked', { userId: user._id.toString(), email: user.email, reason: 'attempts_exhausted' });
         throw new AppError('Too many failed attempts. Please register again.', 400);
       }
 
+      logSecurityEvent('auth.verification.failed', { userId: user._id.toString(), email: user.email, remainingAttempts: remaining });
       throw new AppError(
         `Invalid verification code. ${remaining} attempt${remaining === 1 ? '' : 's'} remaining.`,
         400,
@@ -264,6 +299,8 @@ class AuthService {
 
     await this.verificationTokenRepository.markUsed(token._id);
 
+    logSecurityEvent('auth.verification.success', { userId: updatedUser._id.toString(), email: updatedUser.email });
+
     return this.createAuthenticationResponse(updatedUser);
   }
 
@@ -274,6 +311,7 @@ class AuthService {
 
       if (pending) {
         await this._sendOtpForPendingRegistration(email, pending.name);
+        logSecurityEvent('auth.verification.otp_resent', { email });
         return { message: 'If this email is registered, a new verification code has been sent.' };
       }
     }
@@ -290,6 +328,8 @@ class AuthService {
     }
 
     await this._sendOtpForUser(user, user.name, user.email, null);
+
+    logSecurityEvent('auth.verification.otp_resent', { userId: user._id.toString(), email: user.email });
 
     return { message: 'If this email is registered, a new verification code has been sent.' };
   }
@@ -415,6 +455,8 @@ class AuthService {
       // Email failure is non-fatal
     }
 
+    logSecurityEvent('auth.password_reset.requested', { userId: user._id.toString(), email: user.email });
+
     return {
       message: 'If this email is registered, a password reset code has been sent.',
     };
@@ -484,6 +526,8 @@ class AuthService {
     // Invalidate existing session/refresh token
     await this.userRepository.clearRefreshToken(user._id);
 
+    logSecurityEvent('auth.password_reset.success', { userId: user._id.toString(), email: user.email });
+
     return {
       message: 'Password has been reset successfully. Please sign in with your new password.',
     };
@@ -535,12 +579,40 @@ class AuthService {
     };
   }
 
-  async createAuthenticationResponse(user) {
+  /**
+   * Issue a new access/refresh token pair and store the rotated refresh-token
+   * hash.
+   *
+   * When expectedPreviousTokenHash is provided (refresh flow), the write is
+   * performed ATOMICALLY and only succeeds if the stored hash still matches.
+   * This closes the concurrent-replay race where two requests presenting the
+   * same valid refresh token would both pass the hash comparison and both
+   * rotate successfully. Returns null when the rotation lost that race — the
+   * caller must treat it as token reuse.
+   */
+  async createAuthenticationResponse(user, expectedPreviousTokenHash = null) {
     const accessToken = this.tokenService.generateAccessToken(user._id);
     const refreshToken = this.tokenService.generateRefreshToken(user._id);
-    const refreshTokenHash = await bcrypt.hash(refreshToken, PASSWORD_SALT_ROUNDS);
+    const refreshTokenHash = await bcrypt.hash(hashTokenForStorage(refreshToken), PASSWORD_SALT_ROUNDS);
+    const refreshTokenExpiresAt = this.tokenService.getRefreshTokenExpiryDate();
 
-    await this.userRepository.updateRefreshToken(user._id, refreshTokenHash);
+    if (
+      expectedPreviousTokenHash !== null &&
+      typeof this.userRepository.updateRefreshTokenIfMatches === 'function'
+    ) {
+      const updated = await this.userRepository.updateRefreshTokenIfMatches(
+        user._id,
+        expectedPreviousTokenHash,
+        refreshTokenHash,
+        refreshTokenExpiresAt,
+      );
+
+      if (!updated) {
+        return null;
+      }
+    } else {
+      await this.userRepository.updateRefreshToken(user._id, refreshTokenHash, refreshTokenExpiresAt);
+    }
 
     return {
       user: serializeUser(user),
@@ -549,6 +621,81 @@ class AuthService {
         refreshToken,
       },
     };
+  }
+
+  // ─── Token Refresh ──────────────────────────────────────────────
+
+  async refreshToken({ refreshToken }) {
+    // 1. Verify the JWT signature and structure
+    let payload;
+    try {
+      payload = this.tokenService.verifyRefreshToken(refreshToken);
+    } catch (_error) {
+      throw new AppError('Invalid or expired refresh token.', 401);
+    }
+
+    if (!payload.sub) {
+      throw new AppError('Invalid or expired refresh token.', 401);
+    }
+
+    // 2. Find the user
+    const user = await this.userRepository.findByIdWithPassword(payload.sub);
+
+    if (!user) {
+      throw new AppError('Invalid or expired refresh token.', 401);
+    }
+
+    // 3. Defense-in-depth: reject unverified users
+    if (!user.isEmailVerified) {
+      throw new AppError('Invalid or expired refresh token.', 401);
+    }
+
+    // 4. Check that the user has a stored refresh token hash
+    if (!user.refreshToken) {
+      throw new AppError('Invalid or expired refresh token.', 401);
+    }
+
+    // 5. Check DB-level expiration
+    if (!user.refreshTokenExpiresAt || user.refreshTokenExpiresAt <= new Date()) {
+      // Clear the stale token data
+      await this.userRepository.clearRefreshToken(user._id);
+      throw new AppError('Invalid or expired refresh token.', 401);
+    }
+
+    // 6. Compare the supplied refresh token against the stored hash.
+    // SHA-256 pre-hash eliminates bcrypt's 72-byte truncation so two
+    // different tokens that share a >72-byte prefix are not treated as equal.
+    const isValid = await bcrypt.compare(hashTokenForStorage(refreshToken), user.refreshToken);
+
+    if (!isValid) {
+      // Possible token reuse attack — log BEFORE invalidating so the signal survives.
+      logSecurityEvent('auth.refresh_token.reuse_detected', {
+        userId: user._id.toString(),
+        email: user.email,
+        reason: 'refresh_token_hash_mismatch',
+      });
+
+      // Possible token reuse attack — clear all tokens for this user
+      await this.userRepository.clearRefreshToken(user._id);
+      throw new AppError('Invalid or expired refresh token.', 401);
+    }
+
+    // 7. Rotate atomically: the stored hash is replaced ONLY if it still
+    // matches what we just compared. A concurrent request using the same
+    // token can win this race exactly once — the loser is treated as reuse.
+    const authentication = await this.createAuthenticationResponse(user, user.refreshToken);
+
+    if (!authentication) {
+      logSecurityEvent('auth.refresh_token.reuse_detected', {
+        userId: user._id.toString(),
+        email: user.email,
+        reason: 'refresh_token_already_rotated',
+      });
+
+      throw new AppError('Invalid or expired refresh token.', 401);
+    }
+
+    return authentication;
   }
 
   // ─── Profile Management ─────────────────────────────────────────
@@ -581,6 +728,8 @@ class AuthService {
 
     // Invalidate existing session/refresh token — user must re-login
     await this.userRepository.clearRefreshToken(userId);
+
+    logSecurityEvent('auth.password_change.success', { userId: userId.toString() });
 
     return { message: 'Password changed successfully. Please sign in again.' };
   }
@@ -628,8 +777,11 @@ class AuthService {
     // 5. Hard-delete the user
     await this.userRepository.deleteById(userId);
 
+    logSecurityEvent('auth.account.deleted', { userId: userId.toString(), email: user.email });
+
     return { message: 'Account has been permanently deleted.' };
   }
 }
 
 module.exports = AuthService;
+module.exports.hashTokenForStorage = hashTokenForStorage;
