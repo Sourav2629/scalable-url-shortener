@@ -5,6 +5,7 @@ const config = require('../../config');
 
 const isProduction = config.app.isProduction();
 const isTest = process.env.NODE_ENV === 'test';
+const usePrettyTransport = !isProduction && !isTest;
 
 // Strict request-ID validation: alphanumeric start, 8-64 chars total,
 // limited to [A-Za-z0-9_.-]. Anything else (spaces, HTML, oversized values)
@@ -19,26 +20,38 @@ function generateRequestId() {
   return crypto.randomUUID();
 }
 
-const logger = pino({
+const loggerConfig = {
   level: isProduction ? 'info' : 'debug',
-  // Pretty printing is for local development only. Under test it adds
-  // worker-thread overhead and noise; in production structured JSON goes to stdout.
-  transport:
-    !isProduction && !isTest
-      ? {
-          target: 'pino-pretty',
-          options: {
-            colorize: true,
-            translateTime: 'SYS:standard',
-          },
-        }
-      : undefined,
   formatters: {
     level: (label) => {
       return { level: label };
     },
   },
-});
+};
+
+// Pretty printing is for local development only. Under test it adds
+// worker-thread overhead and noise; in production structured JSON goes to stdout.
+// IMPORTANT: pino-pretty must never be referenced when running in production
+// because the production Docker image uses `npm ci --omit=dev` and pino-pretty
+// is a devDependency. Even referencing the module name can trigger pino's
+// transport worker-thread resolution, which fails when the module is absent.
+if (usePrettyTransport) {
+  try {
+    // eslint-disable-next-line global-require
+    require('pino-pretty');
+    loggerConfig.transport = {
+      target: 'pino-pretty',
+      options: {
+        colorize: true,
+        translateTime: 'SYS:standard',
+      },
+    };
+  } catch (_err) {
+    // pino-pretty not installed — fall back to structured JSON output
+  }
+}
+
+const logger = pino(loggerConfig);
 
 const httpLogger = pinoHttp({
   logger,
